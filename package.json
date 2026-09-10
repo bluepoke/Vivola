@@ -19,6 +19,7 @@
     "iron-session": "^8.0.4",
     "next": "^16.3.4",
     "prisma": "^6.19.3",
+    "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "socket.io": "^4.8.3",
@@ -28,6 +29,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.20.2",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "dotenv": "^17.4.2",

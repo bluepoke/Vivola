@@ -8,16 +8,22 @@ datasource db {
 }
 
 model Lecturer {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   passwordHash String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   sets         Set[]
+  sessions     Session[]
 }
 
 enum SetType {
   SURVEY
   QUESTION
+}
+
+enum DisplayMode {
+  SPLIT
+  COMBINED
 }
 
 model Set {
@@ -29,6 +35,7 @@ model Set {
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
   questions  Question[]
+  sessions   Session[]
 
   @@index([lecturerId])
 }
@@ -54,4 +61,46 @@ model AnswerOption {
   order      Int
 
   @@index([questionId])
+}
+
+// A Session snapshots its Questions (and, for a Question Set, their correct
+// answers) from the Set at start time. See ADR 0001: later edits to the Set
+// must never change a Session already started from it, so SessionQuestion /
+// SessionAnswerOption are copies, not references to Question / AnswerOption.
+model Session {
+  id          String            @id @default(cuid())
+  lecturerId  String
+  lecturer    Lecturer          @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
+  setId       String?
+  set         Set?              @relation(fields: [setId], references: [id], onDelete: SetNull)
+  type        SetType
+  title       String
+  displayMode DisplayMode
+  joinCode    String            @unique
+  createdAt   DateTime          @default(now())
+  questions   SessionQuestion[]
+
+  @@index([lecturerId])
+}
+
+model SessionQuestion {
+  id        String                @id @default(cuid())
+  sessionId String
+  session   Session               @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  prompt    String
+  order     Int
+  options   SessionAnswerOption[]
+
+  @@index([sessionId])
+}
+
+model SessionAnswerOption {
+  id                String          @id @default(cuid())
+  sessionQuestionId String
+  sessionQuestion   SessionQuestion @relation(fields: [sessionQuestionId], references: [id], onDelete: Cascade)
+  text              String
+  isCorrect         Boolean
+  order             Int
+
+  @@index([sessionQuestionId])
 }

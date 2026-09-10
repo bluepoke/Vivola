@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireLecturer } from "@/lib/auth/session";
 import { listSets } from "@/lib/sets/set-service";
+import { getActiveSessionForLecturer } from "@/lib/sessions/session-service";
 import { CreateSetForm } from "@/app/sets/_components/create-set-form";
 
 export default async function SetsPage() {
@@ -10,11 +11,23 @@ export default async function SetsPage() {
     redirect("/login");
   }
 
-  const sets = await listSets(lecturer.id);
+  const [sets, activeSession] = await Promise.all([
+    listSets(lecturer.id),
+    getActiveSessionForLecturer(lecturer.id),
+  ]);
 
   return (
     <main>
       <h1>My Sets</h1>
+
+      {activeSession ? (
+        <p>
+          You have an active Session: <Link href={`/sessions/${activeSession.id}`}>
+            {activeSession.title}
+          </Link>
+        </p>
+      ) : null}
+
       <ul>
         {sets.map((set) => (
           <li key={set.id}>

@@ -1,9 +1,8 @@
 import { prisma } from "@/lib/db/client";
 import { Prisma, type SetType } from "@prisma/client";
+import { InvalidInputError, NotFoundError } from "@/lib/errors";
 
-export class InvalidInputError extends Error {}
-export class NotFoundError extends Error {}
-
+export { InvalidInputError, NotFoundError };
 export type { SetType };
 
 export type AnswerOptionInput = { text: string; isCorrect?: boolean };

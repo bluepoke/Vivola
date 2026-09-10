@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { QuestionForm } from "@/app/sets/_components/question-form";
+import { StartSessionForm } from "@/app/sets/_components/start-session-form";
 import type { SetView } from "@/lib/sets/set-service";
 
 export function SetDetail({ set }: { set: SetView }) {
@@ -114,6 +115,9 @@ export function SetDetail({ set }: { set: SetView }) {
       <button type="button" onClick={handleDeleteSet} disabled={deleting}>
         Delete Set
       </button>
+
+      <h2>Start a Session</h2>
+      <StartSessionForm setId={set.id} />
     </main>
   );
 }
