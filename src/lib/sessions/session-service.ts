@@ -157,6 +157,22 @@ export async function getSession(lecturerId: string, sessionId: string): Promise
   return toSessionView(session);
 }
 
+export async function cancelSession(lecturerId: string, sessionId: string): Promise<void> {
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  if (!session || session.lecturerId !== lecturerId) {
+    throw new NotFoundError(`No Session ${sessionId} found for this Lecturer`);
+  }
+
+  try {
+    await prisma.session.delete({ where: { id: sessionId } });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      throw new NotFoundError(`No Session ${sessionId} found for this Lecturer`);
+    }
+    throw error;
+  }
+}
+
 export async function getActiveSessionForLecturer(
   lecturerId: string
 ): Promise<{ id: string; title: string } | null> {

@@ -5,6 +5,7 @@ import { signUp } from "@/lib/auth/lecturer-auth";
 import { addQuestion, createSet, updateQuestion } from "@/lib/sets/set-service";
 import {
   AlreadyActiveSessionError,
+  cancelSession,
   getActiveSessionForLecturer,
   getPublicSession,
   getSession,
@@ -143,6 +144,41 @@ describe("getSession", () => {
     const lecturer = await makeLecturer("ada@example.com");
 
     await expect(getSession(lecturer.id, "does-not-exist")).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe("cancelSession", () => {
+  it("deletes the Session, freeing the Lecturer to start another one", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const setA = await createSet(lecturer.id, { type: "SURVEY", title: "Set A" });
+    const setB = await createSet(lecturer.id, { type: "SURVEY", title: "Set B" });
+    const session = await startSession(lecturer.id, { setId: setA.id, displayMode: "SPLIT" });
+
+    await cancelSession(lecturer.id, session.id);
+
+    await expect(getSession(lecturer.id, session.id)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      startSession(lecturer.id, { setId: setB.id, displayMode: "SPLIT" })
+    ).resolves.toBeTruthy();
+  });
+
+  it("throws NotFoundError for a Session owned by a different Lecturer", async () => {
+    const ada = await makeLecturer("ada@example.com");
+    const grace = await makeLecturer("grace@example.com");
+    const gracesSet = await createSet(grace.id, { type: "SURVEY", title: "Grace's set" });
+    const gracesSession = await startSession(grace.id, { setId: gracesSet.id, displayMode: "SPLIT" });
+
+    await expect(cancelSession(ada.id, gracesSession.id)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("throws NotFoundError for a Session that was already cancelled", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "SURVEY", title: "Opinions" });
+    const session = await startSession(lecturer.id, { setId: set.id, displayMode: "SPLIT" });
+
+    await cancelSession(lecturer.id, session.id);
+
+    await expect(cancelSession(lecturer.id, session.id)).rejects.toBeInstanceOf(NotFoundError);
   });
 });
 
