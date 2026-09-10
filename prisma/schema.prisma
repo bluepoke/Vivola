@@ -12,4 +12,46 @@ model Lecturer {
   email        String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
+  sets         Set[]
+}
+
+enum SetType {
+  SURVEY
+  QUESTION
+}
+
+model Set {
+  id         String     @id @default(cuid())
+  lecturerId String
+  lecturer   Lecturer   @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
+  type       SetType
+  title      String
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  questions  Question[]
+
+  @@index([lecturerId])
+}
+
+model Question {
+  id        String         @id @default(cuid())
+  setId     String
+  set       Set            @relation(fields: [setId], references: [id], onDelete: Cascade)
+  prompt    String
+  order     Int
+  createdAt DateTime       @default(now())
+  options   AnswerOption[]
+
+  @@index([setId])
+}
+
+model AnswerOption {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  isCorrect  Boolean  @default(false)
+  order      Int
+
+  @@index([questionId])
 }
