@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { QuestionForm } from "@/app/sets/_components/question-form";
@@ -47,6 +48,9 @@ export function SetDetail({ set }: { set: SetView }) {
 
   return (
     <main>
+      <p>
+        <Link href="/sets">← Back to My Sets</Link>
+      </p>
       <h1>{set.title}</h1>
       <p>{set.type === "SURVEY" ? "Survey Set" : "Question Set"}</p>
 
