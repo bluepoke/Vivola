@@ -79,8 +79,25 @@ model Session {
   joinCode    String            @unique
   createdAt   DateTime          @default(now())
   questions   SessionQuestion[]
+  students    Student[]
 
   @@index([lecturerId])
+}
+
+// A Student who has joined a Session — anonymously (Survey Session, nickname
+// null) or with a nickname (Quiz Session). Nickname uniqueness is enforced
+// per Session via the compound unique constraint below; Postgres treats
+// multiple NULLs as distinct, so any number of anonymous Students can share
+// a Survey Session without colliding.
+model Student {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  nickname  String?
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, nickname])
+  @@index([sessionId])
 }
 
 model SessionQuestion {

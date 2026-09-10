@@ -1,30 +1,13 @@
-import { getIronSession, type IronSession, type SessionOptions } from "iron-session";
+import { getIronSession, type IronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { findLecturerById, type Lecturer } from "@/lib/auth/lecturer-auth";
+import { createSessionOptions } from "@/lib/auth/iron-session-options";
 
 export type SessionData = {
   lecturerId?: string;
 };
 
-function sessionSecret(): string {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error("SESSION_SECRET must be set to a string of at least 32 characters");
-  }
-  return secret;
-}
-
-const sessionOptions: SessionOptions = {
-  get password() {
-    return sessionSecret();
-  },
-  cookieName: "vivola_session",
-  cookieOptions: {
-    secure: process.env.NODE_ENV === "production",
-    httpOnly: true,
-    sameSite: "lax",
-  },
-};
+const sessionOptions = createSessionOptions("vivola_session");
 
 export async function getSession(): Promise<IronSession<SessionData>> {
   return getIronSession<SessionData>(await cookies(), sessionOptions);
