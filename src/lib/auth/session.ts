@@ -30,18 +30,16 @@ export async function getSession(): Promise<IronSession<SessionData>> {
   return getIronSession<SessionData>(await cookies(), sessionOptions);
 }
 
-// Clears the session cookie if it points at a Lecturer that no longer exists.
+// Used from both Server Components and Route Handlers, so it must never
+// write cookies — Next.js only allows cookie mutation from Route
+// Handlers/Server Actions, and would throw if called during a page render.
+// A session pointing at a deleted Lecturer is treated as logged out; the
+// stale cookie is overwritten the next time the browser logs in.
 export async function requireLecturer(): Promise<Lecturer | null> {
   const session = await getSession();
   if (!session.lecturerId) {
     return null;
   }
 
-  const lecturer = await findLecturerById(session.lecturerId);
-  if (!lecturer) {
-    session.destroy();
-    return null;
-  }
-
-  return lecturer;
+  return findLecturerById(session.lecturerId);
 }
