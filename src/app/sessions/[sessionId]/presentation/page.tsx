@@ -23,7 +23,7 @@ export default async function PresentationPage({
     <main>
       <h1>{session.title}</h1>
       <p>{session.type === "SURVEY" ? "Survey Session" : "Quiz Session"}</p>
-      <JoinInfo joinCode={session.joinCode} />
+      <JoinInfo sessionId={session.id} joinCode={session.joinCode} />
     </main>
   );
 }

@@ -57,3 +57,7 @@ export async function getStudentInSession(
   }
   return toStudentView(student);
 }
+
+export async function getStudentCount(sessionId: string): Promise<number> {
+  return prisma.student.count({ where: { sessionId } });
+}

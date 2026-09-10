@@ -6,6 +6,7 @@ import { createSet } from "@/lib/sets/set-service";
 import { startSession } from "@/lib/sessions/session-service";
 import {
   NicknameTakenError,
+  getStudentCount,
   getStudentInSession,
   joinSessionByJoinCode,
 } from "@/lib/students/student-service";
@@ -173,5 +174,33 @@ describe("getStudentInSession", () => {
     const found = await getStudentInSession(session.id, "does-not-exist");
 
     expect(found).toBeNull();
+  });
+});
+
+describe("getStudentCount", () => {
+  it("returns 0 for a Session no Student has joined yet", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeSurveySession(lecturer.id);
+
+    await expect(getStudentCount(session.id)).resolves.toBe(0);
+  });
+
+  it("counts the Students who have joined a Session", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSession(lecturer.id);
+    await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
+    await joinSessionByJoinCode(session.joinCode, { nickname: "Grace" });
+
+    await expect(getStudentCount(session.id)).resolves.toBe(2);
+  });
+
+  it("doesn't count Students who joined a different Session", async () => {
+    const ada = await makeLecturer("ada@example.com");
+    const grace = await makeLecturer("grace@example.com");
+    const sessionA = await makeSurveySession(ada.id);
+    const sessionB = await makeSurveySession(grace.id);
+    await joinSessionByJoinCode(sessionA.joinCode, {});
+
+    await expect(getStudentCount(sessionB.id)).resolves.toBe(0);
   });
 });

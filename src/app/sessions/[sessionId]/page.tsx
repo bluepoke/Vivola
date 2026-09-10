@@ -41,7 +41,7 @@ export default async function SessionControlPage({
           can see. This page stays private to you.
         </p>
       ) : (
-        <JoinInfo joinCode={session.joinCode} />
+        <JoinInfo sessionId={session.id} joinCode={session.joinCode} />
       )}
 
       <section aria-label="Lecturer controls">

@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import next from "next";
 import { Server as SocketIOServer } from "socket.io";
+import { sessionRoom, setSessionSocketServer } from "@/lib/realtime/session-socket-server";
 
 const port = Number(process.env.PORT ?? 3000);
 const dev = process.env.NODE_ENV !== "production";
@@ -14,11 +15,16 @@ app.prepare().then(() => {
   });
 
   // Groundwork for live Session updates (Presentation view, Lecturer control
-  // view, Student devices). Session-specific rooms/events land in later
-  // tickets; this just establishes that the socket server is wired up.
+  // view, Student devices). A client joins a Session's room to receive
+  // updates scoped to that Session; API route handlers emit into the room
+  // via getSessionSocketServer() (see src/lib/realtime/session-socket-server.ts).
   const io = new SocketIOServer(httpServer);
+  setSessionSocketServer(io);
 
   io.on("connection", (socket) => {
+    socket.on("session:join-room", (sessionId: string) => {
+      socket.join(sessionRoom(sessionId));
+    });
     socket.on("disconnect", () => {});
   });
 
