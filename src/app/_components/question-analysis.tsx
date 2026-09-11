@@ -1,5 +1,6 @@
 import type { QuestionAnalysisView } from "@/lib/answers/answer-service";
 import type { LeaderboardEntryView } from "@/lib/leaderboard/leaderboard-service";
+import { Leaderboard } from "@/app/_components/leaderboard";
 
 // Renders a closed Question's Analysis — the answer distribution, and (for a
 // Question Set) the correct answer — shared between the Presentation view,
@@ -40,13 +41,7 @@ export function QuestionAnalysis({
       {leaderboard && (
         <section aria-label="Leaderboard">
           <h3>Leaderboard</h3>
-          <ol>
-            {leaderboard.map((entry) => (
-              <li key={entry.studentId}>
-                {entry.nickname ?? "Anonymous"}: {entry.score}
-              </li>
-            ))}
-          </ol>
+          <Leaderboard entries={leaderboard} />
         </section>
       )}
     </section>

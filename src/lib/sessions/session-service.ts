@@ -16,6 +16,10 @@ export type { DisplayMode, SetType };
 
 export type SessionOptionView = { id: string; text: string; isCorrect: boolean };
 export type SessionQuestionView = { id: string; prompt: string; options: SessionOptionView[] };
+export function sessionTypeLabel(type: SetType): string {
+  return type === "SURVEY" ? "Survey Session" : "Quiz Session";
+}
+
 export type SessionView = {
   id: string;
   lecturerId: string;
@@ -431,6 +435,65 @@ export async function nextQuestion(lecturerId: string, sessionId: string): Promi
   }
 
   return toSessionQuestionView(next);
+}
+
+export type PastSessionSummary = {
+  id: string;
+  title: string;
+  type: SetType;
+  endedAt: Date;
+};
+
+export type PastSessionGroup = {
+  id: string;
+  setId: string | null;
+  setTitle: string;
+  sessions: PastSessionSummary[];
+};
+
+// The Lecturer's ended Sessions, for later review (see CONTEXT.md), grouped
+// by the Set each one ran and ordered by each group's most recently ended
+// Session. `setTitle` is the Set's *current* title (falling back to the
+// Session's own snapshotted title once the Set has been deleted, setId
+// null per the Session model's onDelete: SetNull) — so a list item's own
+// title can differ from its group's heading if the Set was renamed between
+// runs, which is expected: the group heading identifies the Set as it is
+// now, while each item preserves what it was actually called at the time
+// (see ADR 0001). Two Sessions whose *different* source Sets have both since
+// been deleted can never be merged back together, even if those Sets once
+// shared a name: onDelete: SetNull discards the Set's id along with the row,
+// so nothing survives to prove they were the same Set — each becomes its own
+// single-Session group instead.
+export async function listPastSessionsForLecturer(lecturerId: string): Promise<PastSessionGroup[]> {
+  const sessions = await prisma.session.findMany({
+    where: { lecturerId, endedAt: { not: null } },
+    orderBy: { endedAt: "desc" },
+    include: { set: { select: { id: true, title: true } } },
+  });
+
+  const groupById = new Map<string, PastSessionGroup>();
+
+  for (const session of sessions) {
+    const id = session.set ? session.set.id : session.id;
+    let group = groupById.get(id);
+    if (!group) {
+      group = {
+        id,
+        setId: session.set?.id ?? null,
+        setTitle: session.set?.title ?? session.title,
+        sessions: [],
+      };
+      groupById.set(id, group);
+    }
+    group.sessions.push({
+      id: session.id,
+      title: session.title,
+      type: session.type,
+      endedAt: session.endedAt!,
+    });
+  }
+
+  return Array.from(groupById.values());
 }
 
 // The Lecturer explicitly concludes the Session, at any point in its

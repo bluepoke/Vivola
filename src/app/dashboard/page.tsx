@@ -16,6 +16,9 @@ export default async function DashboardPage() {
       <p>
         <Link href="/sets">My Sets</Link>
       </p>
+      <p>
+        <Link href="/sessions">Past Sessions</Link>
+      </p>
       <LogoutButton />
     </main>
   );

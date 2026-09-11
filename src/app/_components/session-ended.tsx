@@ -1,5 +1,6 @@
 import type { SetType } from "@/lib/sessions/session-service";
 import type { LeaderboardEntryView } from "@/lib/leaderboard/leaderboard-service";
+import { Leaderboard } from "@/app/_components/leaderboard";
 
 // The final summary shown to the Presentation view, every Student's device,
 // and the Lecturer control view once the Lecturer ends the Session: the
@@ -19,13 +20,7 @@ export function SessionEnded({
       {sessionType === "QUESTION" ? (
         <section aria-label="Leaderboard">
           <h3>Final Leaderboard</h3>
-          <ol>
-            {leaderboard?.map((entry) => (
-              <li key={entry.studentId}>
-                {entry.nickname ?? "Anonymous"}: {entry.score}
-              </li>
-            ))}
-          </ol>
+          <Leaderboard entries={leaderboard} />
         </section>
       ) : (
         <p>Thanks for participating!</p>

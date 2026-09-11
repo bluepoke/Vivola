@@ -18,10 +18,12 @@ import {
   getPublicSession,
   getSession,
   getSessionByJoinCode,
+  listPastSessionsForLecturer,
   nextQuestion,
   openQuestion,
   startSession,
 } from "@/lib/sessions/session-service";
+import { deleteSet } from "@/lib/sets/set-service";
 import { NoOpenQuestionError, submitAnswer } from "@/lib/answers/answer-service";
 import { joinSessionByJoinCode } from "@/lib/students/student-service";
 
@@ -621,5 +623,92 @@ describe("endSession", () => {
     await endSession(lecturer.id, session.id);
 
     await expect(nextQuestion(lecturer.id, session.id)).rejects.toBeInstanceOf(SessionEndedError);
+  });
+});
+
+describe("listPastSessionsForLecturer", () => {
+  it("returns an empty array when the Lecturer has no ended Sessions", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+
+    await expect(listPastSessionsForLecturer(lecturer.id)).resolves.toEqual([]);
+  });
+
+  it("excludes a Session that hasn't ended yet", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "SURVEY", title: "Opinions" });
+    await startSession(lecturer.id, { setId: set.id, displayMode: "SPLIT" });
+
+    await expect(listPastSessionsForLecturer(lecturer.id)).resolves.toEqual([]);
+  });
+
+  it("returns an ended Session grouped under its originating Set", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "SURVEY", title: "Opinions" });
+    const session = await startSession(lecturer.id, { setId: set.id, displayMode: "SPLIT" });
+    await endSession(lecturer.id, session.id);
+
+    const groups = await listPastSessionsForLecturer(lecturer.id);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.setId).toBe(set.id);
+    expect(groups[0]!.setTitle).toBe("Opinions");
+    expect(groups[0]!.sessions).toHaveLength(1);
+    expect(groups[0]!.sessions[0]!.id).toBe(session.id);
+    expect(groups[0]!.sessions[0]!.title).toBe("Opinions");
+    expect(groups[0]!.sessions[0]!.type).toBe("SURVEY");
+    expect(groups[0]!.sessions[0]!.endedAt).toBeInstanceOf(Date);
+  });
+
+  it("groups multiple ended Sessions run from the same Set together", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "SURVEY", title: "Opinions" });
+    const first = await startSession(lecturer.id, { setId: set.id, displayMode: "SPLIT" });
+    await endSession(lecturer.id, first.id);
+    const second = await startSession(lecturer.id, { setId: set.id, displayMode: "SPLIT" });
+    await endSession(lecturer.id, second.id);
+
+    const groups = await listPastSessionsForLecturer(lecturer.id);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.sessions.map((s) => s.id)).toEqual([second.id, first.id]);
+  });
+
+  it("orders groups by their most recently ended Session first", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const setA = await createSet(lecturer.id, { type: "SURVEY", title: "Set A" });
+    const setB = await createSet(lecturer.id, { type: "SURVEY", title: "Set B" });
+    const sessionA = await startSession(lecturer.id, { setId: setA.id, displayMode: "SPLIT" });
+    await endSession(lecturer.id, sessionA.id);
+    const sessionB = await startSession(lecturer.id, { setId: setB.id, displayMode: "SPLIT" });
+    await endSession(lecturer.id, sessionB.id);
+
+    const groups = await listPastSessionsForLecturer(lecturer.id);
+
+    expect(groups.map((g) => g.setId)).toEqual([setB.id, setA.id]);
+  });
+
+  it("falls back to the Session's own snapshotted title once its source Set has been deleted", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "SURVEY", title: "Opinions" });
+    const session = await startSession(lecturer.id, { setId: set.id, displayMode: "SPLIT" });
+    await endSession(lecturer.id, session.id);
+    await deleteSet(lecturer.id, set.id);
+
+    const groups = await listPastSessionsForLecturer(lecturer.id);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.setId).toBeNull();
+    expect(groups[0]!.setTitle).toBe("Opinions");
+    expect(groups[0]!.sessions[0]!.id).toBe(session.id);
+  });
+
+  it("does not include another Lecturer's ended Sessions", async () => {
+    const ada = await makeLecturer("ada@example.com");
+    const grace = await makeLecturer("grace@example.com");
+    const gracesSet = await createSet(grace.id, { type: "SURVEY", title: "Grace's set" });
+    const gracesSession = await startSession(grace.id, { setId: gracesSet.id, displayMode: "SPLIT" });
+    await endSession(grace.id, gracesSession.id);
+
+    await expect(listPastSessionsForLecturer(ada.id)).resolves.toEqual([]);
   });
 });
