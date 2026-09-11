@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import {
-  InvalidInputError,
-  JoiningClosedError,
-  NicknameTakenError,
+  AlreadyAnsweredError,
+  InvalidAnswerOptionError,
+  NoOpenQuestionError,
   NotFoundError,
-} from "@/lib/students/student-service";
+} from "@/lib/answers/answer-service";
 
-export function studentServiceErrorResponse(error: unknown): NextResponse | null {
-  if (error instanceof InvalidInputError) {
+export function answerServiceErrorResponse(error: unknown): NextResponse | null {
+  if (error instanceof InvalidAnswerOptionError) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
-  if (error instanceof NicknameTakenError || error instanceof JoiningClosedError) {
+  if (error instanceof NoOpenQuestionError || error instanceof AlreadyAnsweredError) {
     return NextResponse.json({ error: error.message }, { status: 409 });
   }
   if (error instanceof NotFoundError) {

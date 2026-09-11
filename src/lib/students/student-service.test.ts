@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db/client";
 import { InvalidInputError, NotFoundError } from "@/lib/errors";
 import { signUp } from "@/lib/auth/lecturer-auth";
-import { createSet } from "@/lib/sets/set-service";
-import { startSession } from "@/lib/sessions/session-service";
+import { addQuestion, createSet } from "@/lib/sets/set-service";
+import { openQuestion, startSession } from "@/lib/sessions/session-service";
 import {
+  JoiningClosedError,
   NicknameTakenError,
   getStudentCount,
   getStudentInSession,
@@ -22,6 +23,15 @@ async function makeSurveySession(lecturerId: string) {
 
 async function makeQuizSession(lecturerId: string) {
   const set = await createSet(lecturerId, { type: "QUESTION", title: "Week 3 quiz" });
+  return startSession(lecturerId, { setId: set.id, displayMode: "SPLIT" });
+}
+
+async function makeQuizSessionWithQuestion(lecturerId: string) {
+  const set = await createSet(lecturerId, { type: "QUESTION", title: "Week 3 quiz" });
+  await addQuestion(lecturerId, set.id, {
+    prompt: "What is 2 + 2?",
+    options: [{ text: "3" }, { text: "4", isCorrect: true }],
+  });
   return startSession(lecturerId, { setId: set.id, displayMode: "SPLIT" });
 }
 
@@ -120,6 +130,16 @@ describe("joinSessionByJoinCode", () => {
 
   it("throws NotFoundError for an unknown join code", async () => {
     await expect(joinSessionByJoinCode("ZZZZZZ", {})).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("rejects joining once the Lecturer has opened the first Question", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestion(lecturer.id);
+    await openQuestion(lecturer.id, session.id, session.questions[0]!.id);
+
+    await expect(
+      joinSessionByJoinCode(session.joinCode, { nickname: "Late Ada" })
+    ).rejects.toBeInstanceOf(JoiningClosedError);
   });
 
   it("throws NotFoundError instead of crashing if the Session is cancelled between the join-code lookup and the Student being created", async () => {

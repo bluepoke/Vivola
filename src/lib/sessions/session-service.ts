@@ -6,6 +6,8 @@ import { getSet } from "@/lib/sets/set-service";
 
 export { NotFoundError };
 export class AlreadyActiveSessionError extends Error {}
+export class QuestionAlreadyOpenError extends Error {}
+export class OutOfOrderQuestionError extends Error {}
 
 export type { DisplayMode, SetType };
 
@@ -19,12 +21,22 @@ export type SessionView = {
   displayMode: DisplayMode;
   joinCode: string;
   questions: SessionQuestionView[];
+  openQuestion: SessionQuestionView | null;
 };
+
+// Unlike SessionOptionView, this omits isCorrect: it's shown to Students and
+// on the Presentation view while a Quiz Session Question is still open, and
+// must not leak the correct answer before the Question closes and its
+// Analysis is revealed (a later ticket).
+export type PublicOptionView = { id: string; text: string };
+export type PublicQuestionView = { id: string; prompt: string; options: PublicOptionView[] };
 export type PublicSessionView = {
   id: string;
   type: SetType;
   title: string;
   joinCode: string;
+  joiningClosed: boolean;
+  openQuestion: PublicQuestionView | null;
 };
 
 const JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
@@ -69,19 +81,32 @@ const sessionInclude = {
   },
 };
 
-function toSessionView(session: {
+type SessionRecord = {
   id: string;
   lecturerId: string;
   type: SetType;
   title: string;
   displayMode: DisplayMode;
   joinCode: string;
+  openQuestionId: string | null;
   questions: {
     id: string;
     prompt: string;
     options: { id: string; text: string; isCorrect: boolean }[];
   }[];
-}): SessionView {
+};
+
+function toSessionView(session: SessionRecord): SessionView {
+  const questions = session.questions.map((question) => ({
+    id: question.id,
+    prompt: question.prompt,
+    options: question.options.map((option) => ({
+      id: option.id,
+      text: option.text,
+      isCorrect: option.isCorrect,
+    })),
+  }));
+
   return {
     id: session.id,
     lecturerId: session.lecturerId,
@@ -89,15 +114,29 @@ function toSessionView(session: {
     title: session.title,
     displayMode: session.displayMode,
     joinCode: session.joinCode,
-    questions: session.questions.map((question) => ({
-      id: question.id,
-      prompt: question.prompt,
-      options: question.options.map((option) => ({
-        id: option.id,
-        text: option.text,
-        isCorrect: option.isCorrect,
-      })),
-    })),
+    questions,
+    openQuestion: questions.find((question) => question.id === session.openQuestionId) ?? null,
+  };
+}
+
+function toPublicSessionView(
+  session: SessionRecord & { firstQuestionOpenedAt: Date | null }
+): PublicSessionView {
+  const openQuestion = session.questions.find((question) => question.id === session.openQuestionId);
+
+  return {
+    id: session.id,
+    type: session.type,
+    title: session.title,
+    joinCode: session.joinCode,
+    joiningClosed: session.firstQuestionOpenedAt !== null,
+    openQuestion: openQuestion
+      ? {
+          id: openQuestion.id,
+          prompt: openQuestion.prompt,
+          options: openQuestion.options.map((option) => ({ id: option.id, text: option.text })),
+        }
+      : null,
   };
 }
 
@@ -181,17 +220,82 @@ export async function getActiveSessionForLecturer(
 }
 
 export async function getPublicSession(sessionId: string): Promise<PublicSessionView> {
-  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    include: sessionInclude,
+  });
   if (!session) {
     throw new NotFoundError(`No Session ${sessionId} found`);
   }
-  return { id: session.id, type: session.type, title: session.title, joinCode: session.joinCode };
+  return toPublicSessionView(session);
 }
 
 export async function getSessionByJoinCode(joinCode: string): Promise<PublicSessionView> {
-  const session = await prisma.session.findUnique({ where: { joinCode } });
+  const session = await prisma.session.findUnique({
+    where: { joinCode },
+    include: sessionInclude,
+  });
   if (!session) {
     throw new NotFoundError(`No Session found for join code ${joinCode}`);
   }
-  return { id: session.id, type: session.type, title: session.title, joinCode: session.joinCode };
+  return toPublicSessionView(session);
+}
+
+// Opens the given Question for the Session, displaying it (and its options)
+// on the Presentation view and every joined Student's device, and — if it's
+// the Session's first Question — permanently closing joining. Questions must
+// be opened in their fixed authoring order; there is no reorder/skip command
+// (see CONTEXT.md), and only the first Question can be opened until closing
+// a Question (a later ticket) clears openQuestionId.
+export async function openQuestion(
+  lecturerId: string,
+  sessionId: string,
+  questionId: string
+): Promise<SessionQuestionView> {
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    include: sessionInclude,
+  });
+  if (!session || session.lecturerId !== lecturerId) {
+    throw new NotFoundError(`No Session ${sessionId} found for this Lecturer`);
+  }
+
+  if (session.openQuestionId) {
+    throw new QuestionAlreadyOpenError("A Question is already open for this Session");
+  }
+
+  const question = session.questions.find((q) => q.id === questionId);
+  if (!question) {
+    throw new NotFoundError(`No Question ${questionId} found in this Session`);
+  }
+
+  const firstQuestion = session.questions[0];
+  if (!firstQuestion || question.id !== firstQuestion.id) {
+    throw new OutOfOrderQuestionError("Questions must be opened in order, starting with the first");
+  }
+
+  // Conditioned on openQuestionId still being null so two concurrent calls
+  // can't both open a Question: only one update matches and the other sees
+  // count 0. This also absorbs the Session being cancelled in the same gap
+  // (0 rows match) instead of throwing an unhandled not-found error.
+  const result = await prisma.session.updateMany({
+    where: { id: sessionId, openQuestionId: null },
+    data: {
+      openQuestionId: question.id,
+      firstQuestionOpenedAt: session.firstQuestionOpenedAt ?? new Date(),
+    },
+  });
+  if (result.count === 0) {
+    throw new QuestionAlreadyOpenError("A Question is already open for this Session");
+  }
+
+  return {
+    id: question.id,
+    prompt: question.prompt,
+    options: question.options.map((option) => ({
+      id: option.id,
+      text: option.text,
+      isCorrect: option.isCorrect,
+    })),
+  };
 }

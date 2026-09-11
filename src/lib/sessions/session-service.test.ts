@@ -5,11 +5,14 @@ import { signUp } from "@/lib/auth/lecturer-auth";
 import { addQuestion, createSet, updateQuestion } from "@/lib/sets/set-service";
 import {
   AlreadyActiveSessionError,
+  OutOfOrderQuestionError,
+  QuestionAlreadyOpenError,
   cancelSession,
   getActiveSessionForLecturer,
   getPublicSession,
   getSession,
   getSessionByJoinCode,
+  openQuestion,
   startSession,
 } from "@/lib/sessions/session-service";
 
@@ -232,5 +235,117 @@ describe("getPublicSession", () => {
 
   it("throws NotFoundError for a Session that doesn't exist", async () => {
     await expect(getPublicSession("does-not-exist")).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("starts with joining open and no open Question", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "SURVEY", title: "Opinions" });
+    const session = await startSession(lecturer.id, { setId: set.id, displayMode: "SPLIT" });
+
+    const found = await getPublicSession(session.id);
+
+    expect(found.joiningClosed).toBe(false);
+    expect(found.openQuestion).toBeNull();
+  });
+});
+
+describe("openQuestion", () => {
+  async function makeQuizSessionWithQuestions(lecturerId: string) {
+    const set = await createSet(lecturerId, { type: "QUESTION", title: "Week 3 quiz" });
+    await addQuestion(lecturerId, set.id, {
+      prompt: "What is 2 + 2?",
+      options: [{ text: "3" }, { text: "4", isCorrect: true }],
+    });
+    await addQuestion(lecturerId, set.id, {
+      prompt: "What is 3 + 3?",
+      options: [{ text: "6", isCorrect: true }, { text: "7" }],
+    });
+    return startSession(lecturerId, { setId: set.id, displayMode: "SPLIT" });
+  }
+
+  it("opens the Session's first Question, returning its prompt and options", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    const firstQuestion = session.questions[0]!;
+
+    const opened = await openQuestion(lecturer.id, session.id, firstQuestion.id);
+
+    expect(opened.id).toBe(firstQuestion.id);
+    expect(opened.prompt).toBe("What is 2 + 2?");
+    expect(opened.options.map((o) => [o.text, o.isCorrect])).toEqual([
+      ["3", false],
+      ["4", true],
+    ]);
+  });
+
+  it("closes joining once the first Question opens, publicly and on the join-code lookup", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    const firstQuestion = session.questions[0]!;
+
+    await openQuestion(lecturer.id, session.id, firstQuestion.id);
+
+    const publicSession = await getPublicSession(session.id);
+    expect(publicSession.joiningClosed).toBe(true);
+    expect(publicSession.openQuestion?.id).toBe(firstQuestion.id);
+    expect(publicSession.openQuestion?.options).toEqual([
+      { id: firstQuestion.options[0]!.id, text: "3" },
+      { id: firstQuestion.options[1]!.id, text: "4" },
+    ]);
+
+    const byJoinCode = await getSessionByJoinCode(session.joinCode);
+    expect(byJoinCode.joiningClosed).toBe(true);
+  });
+
+  it("reflects the open Question on the Lecturer's own Session view too", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    const firstQuestion = session.questions[0]!;
+
+    await openQuestion(lecturer.id, session.id, firstQuestion.id);
+
+    const reloaded = await getSession(lecturer.id, session.id);
+    expect(reloaded.openQuestion?.id).toBe(firstQuestion.id);
+  });
+
+  it("rejects opening a Question that isn't the Session's first Question", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    const secondQuestion = session.questions[1]!;
+
+    await expect(
+      openQuestion(lecturer.id, session.id, secondQuestion.id)
+    ).rejects.toBeInstanceOf(OutOfOrderQuestionError);
+  });
+
+  it("rejects opening a Question while one is already open", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    const firstQuestion = session.questions[0]!;
+    await openQuestion(lecturer.id, session.id, firstQuestion.id);
+
+    await expect(
+      openQuestion(lecturer.id, session.id, firstQuestion.id)
+    ).rejects.toBeInstanceOf(QuestionAlreadyOpenError);
+  });
+
+  it("throws NotFoundError for a Question that doesn't belong to the Session", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+
+    await expect(
+      openQuestion(lecturer.id, session.id, "does-not-exist")
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("throws NotFoundError for a Session owned by a different Lecturer", async () => {
+    const ada = await makeLecturer("ada@example.com");
+    const grace = await makeLecturer("grace@example.com");
+    const gracesSession = await makeQuizSessionWithQuestions(grace.id);
+    const firstQuestion = gracesSession.questions[0]!;
+
+    await expect(
+      openQuestion(ada.id, gracesSession.id, firstQuestion.id)
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

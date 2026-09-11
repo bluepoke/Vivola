@@ -5,6 +5,7 @@ import { getSessionByJoinCode } from "@/lib/sessions/session-service";
 
 export { InvalidInputError, NotFoundError };
 export class NicknameTakenError extends Error {}
+export class JoiningClosedError extends Error {}
 
 export type StudentView = { id: string; sessionId: string; nickname: string | null };
 
@@ -17,6 +18,11 @@ export async function joinSessionByJoinCode(
   input: { nickname?: string }
 ): Promise<StudentView> {
   const session = await getSessionByJoinCode(joinCode);
+  if (session.joiningClosed) {
+    throw new JoiningClosedError(
+      "Joining is closed for this Session; the Lecturer has already opened the first Question"
+    );
+  }
 
   let nickname: string | null = null;
   if (session.type === "QUESTION") {

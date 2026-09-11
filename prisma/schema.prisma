@@ -81,6 +81,15 @@ model Session {
   questions   SessionQuestion[]
   students    Student[]
 
+  // The SessionQuestion currently open for Students to answer, and the
+  // moment the first Question was ever opened (which permanently closes
+  // joining, per CONTEXT.md). Not a Prisma relation: openQuestionId always
+  // points at one of this Session's own SessionQuestion rows, which are
+  // cascade-deleted together with it, so a cross-table FK here would only
+  // add a same-transaction cascade cycle for no referential benefit.
+  openQuestionId        String?
+  firstQuestionOpenedAt DateTime?
+
   @@index([lecturerId])
 }
 
@@ -95,6 +104,7 @@ model Student {
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   nickname  String?
   createdAt DateTime @default(now())
+  answers   Answer[]
 
   @@unique([sessionId, nickname])
   @@index([sessionId])
@@ -107,6 +117,7 @@ model SessionQuestion {
   prompt    String
   order     Int
   options   SessionAnswerOption[]
+  answers   Answer[]
 
   @@index([sessionId])
 }
@@ -118,6 +129,26 @@ model SessionAnswerOption {
   text              String
   isCorrect         Boolean
   order             Int
+  answers           Answer[]
 
   @@index([sessionQuestionId])
+}
+
+// A Student's one-time, locked submission to an open Question (see
+// CONTEXT.md's Answer definition). The compound unique constraint enforces
+// "at most one Answer per Student per Question" at the database level; there
+// is no update path by design — an Answer is created once and never edited.
+model Answer {
+  id                String              @id @default(cuid())
+  sessionQuestionId String
+  sessionQuestion   SessionQuestion     @relation(fields: [sessionQuestionId], references: [id], onDelete: Cascade)
+  studentId         String
+  student           Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answerOptionId    String
+  answerOption      SessionAnswerOption @relation(fields: [answerOptionId], references: [id], onDelete: Cascade)
+  createdAt         DateTime            @default(now())
+
+  @@unique([sessionQuestionId, studentId])
+  @@index([studentId])
+  @@index([answerOptionId])
 }
