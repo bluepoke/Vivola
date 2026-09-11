@@ -3,7 +3,8 @@ import { prisma } from "@/lib/db/client";
 import { NotFoundError } from "@/lib/errors";
 import { signUp } from "@/lib/auth/lecturer-auth";
 import { addQuestion, createSet } from "@/lib/sets/set-service";
-import { closeQuestion, openQuestion, startSession } from "@/lib/sessions/session-service";
+import { SessionEndedError } from "@/lib/errors";
+import { closeQuestion, endSession, openQuestion, startSession } from "@/lib/sessions/session-service";
 import { joinSessionByJoinCode } from "@/lib/students/student-service";
 import {
   AlreadyAnsweredError,
@@ -101,6 +102,19 @@ describe("submitAnswer", () => {
         answerOptionId: session.questions[0]!.options[0]!.id,
       })
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("rejects an Answer once the Session has ended, even to a Question left open", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithTwoQuestions(lecturer.id);
+    const question = session.questions[0]!;
+    const student = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
+    await openQuestion(lecturer.id, session.id, question.id);
+    await endSession(lecturer.id, session.id);
+
+    await expect(
+      submitAnswer(session.id, student.id, { answerOptionId: question.options[0]!.id })
+    ).rejects.toBeInstanceOf(SessionEndedError);
   });
 
   it("lets different Students each submit their own Answer to the same Question", async () => {

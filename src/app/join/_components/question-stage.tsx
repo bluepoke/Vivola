@@ -6,6 +6,7 @@ import type { PublicQuestionView, SetType } from "@/lib/sessions/session-service
 import type { QuestionAnalysisView } from "@/lib/answers/answer-service";
 import type { LeaderboardEntryView } from "@/lib/leaderboard/leaderboard-service";
 import { AnswerForm } from "@/app/join/_components/answer-form";
+import { SessionEnded } from "@/app/_components/session-ended";
 
 // Swaps a joined Student's device between the lobby, the open Question, and
 // the closed Question's Analysis, live, as soon as the Lecturer opens/closes
@@ -21,6 +22,7 @@ export function QuestionStage({
   answeredOptionId,
   initialClosedAnalysis,
   initialLeaderboard,
+  initialEnded,
   lobby,
 }: {
   sessionId: string;
@@ -29,12 +31,14 @@ export function QuestionStage({
   answeredOptionId: string | null;
   initialClosedAnalysis: QuestionAnalysisView | null;
   initialLeaderboard: LeaderboardEntryView[] | null;
+  initialEnded: boolean;
   lobby: ReactNode;
 }) {
   const [question, setQuestion] = useState(initialQuestion);
   const [ownAnswerOptionId, setOwnAnswerOptionId] = useState(answeredOptionId);
   const [closedAnalysis, setClosedAnalysis] = useState(initialClosedAnalysis);
   const [leaderboard, setLeaderboard] = useState(initialLeaderboard);
+  const [ended, setEnded] = useState(initialEnded);
 
   useEffect(() => {
     const socket = io();
@@ -52,11 +56,19 @@ export function QuestionStage({
         setLeaderboard(payload.leaderboard);
       }
     );
+    socket.on("session:ended", (payload: { leaderboard: LeaderboardEntryView[] | null }) => {
+      setEnded(true);
+      setLeaderboard(payload.leaderboard);
+    });
 
     return () => {
       socket.disconnect();
     };
   }, [sessionId]);
+
+  if (ended) {
+    return <SessionEnded sessionType={sessionType} leaderboard={leaderboard} />;
+  }
 
   const effectiveQuestion = question ?? closedAnalysis;
   if (!effectiveQuestion) {

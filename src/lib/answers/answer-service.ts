@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/db/client";
 import { Prisma } from "@prisma/client";
-import { NotFoundError } from "@/lib/errors";
+import { NotFoundError, SessionEndedError } from "@/lib/errors";
 
-export { NotFoundError };
+export { NotFoundError, SessionEndedError };
 export class NoOpenQuestionError extends Error {}
 export class InvalidAnswerOptionError extends Error {}
 export class AlreadyAnsweredError extends Error {}
@@ -46,6 +46,9 @@ export async function submitAnswer(
   const session = await prisma.session.findUnique({ where: { id: sessionId } });
   if (!session) {
     throw new NotFoundError(`No Session ${sessionId} found`);
+  }
+  if (session.endedAt) {
+    throw new SessionEndedError("This Session has already ended");
   }
   if (!session.openQuestionId) {
     throw new NoOpenQuestionError("No Question is currently open for this Session");

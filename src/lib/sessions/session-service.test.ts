@@ -10,8 +10,10 @@ import {
   QuestionAlreadyOpenError,
   QuestionNotClosedError,
   QuestionNotOpenError,
+  SessionEndedError,
   cancelSession,
   closeQuestion,
+  endSession,
   getActiveSessionForLecturer,
   getPublicSession,
   getSession,
@@ -202,6 +204,16 @@ describe("cancelSession", () => {
     await cancelSession(lecturer.id, session.id);
 
     await expect(cancelSession(lecturer.id, session.id)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("throws SessionEndedError for a Session that has already ended, preserving its recorded results", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "SURVEY", title: "Opinions" });
+    const session = await startSession(lecturer.id, { setId: set.id, displayMode: "SPLIT" });
+    await endSession(lecturer.id, session.id);
+
+    await expect(cancelSession(lecturer.id, session.id)).rejects.toBeInstanceOf(SessionEndedError);
+    await expect(getSession(lecturer.id, session.id)).resolves.toBeTruthy();
   });
 });
 
@@ -512,5 +524,102 @@ describe("nextQuestion", () => {
     await closeQuestion(grace.id, gracesSession.id);
 
     await expect(nextQuestion(ada.id, gracesSession.id)).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe("endSession", () => {
+  it("marks the Session as ended, at any point, even before any Question has opened", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+
+    await endSession(lecturer.id, session.id);
+
+    const reloaded = await getSession(lecturer.id, session.id);
+    expect(reloaded.ended).toBe(true);
+  });
+
+  it("marks the Session as ended while a Question is still open", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    await openQuestion(lecturer.id, session.id, session.questions[0]!.id);
+
+    await endSession(lecturer.id, session.id);
+
+    const reloaded = await getSession(lecturer.id, session.id);
+    expect(reloaded.ended).toBe(true);
+  });
+
+  it("frees the Lecturer to start a new Session", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const setA = await createSet(lecturer.id, { type: "SURVEY", title: "Set A" });
+    const setB = await createSet(lecturer.id, { type: "SURVEY", title: "Set B" });
+    const session = await startSession(lecturer.id, { setId: setA.id, displayMode: "SPLIT" });
+
+    await endSession(lecturer.id, session.id);
+
+    await expect(getActiveSessionForLecturer(lecturer.id)).resolves.toBeNull();
+    await expect(
+      startSession(lecturer.id, { setId: setB.id, displayMode: "SPLIT" })
+    ).resolves.toBeTruthy();
+  });
+
+  it("does not delete the Session, so it stays available for Lecturer review", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+
+    await endSession(lecturer.id, session.id);
+
+    await expect(getSession(lecturer.id, session.id)).resolves.toBeTruthy();
+  });
+
+  it("throws SessionEndedError when the Session has already ended", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    await endSession(lecturer.id, session.id);
+
+    await expect(endSession(lecturer.id, session.id)).rejects.toBeInstanceOf(SessionEndedError);
+  });
+
+  it("throws NotFoundError for a Session owned by a different Lecturer", async () => {
+    const ada = await makeLecturer("ada@example.com");
+    const grace = await makeLecturer("grace@example.com");
+    const gracesSession = await makeQuizSessionWithQuestions(grace.id);
+
+    await expect(endSession(ada.id, gracesSession.id)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("throws NotFoundError for a Session that doesn't exist", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+
+    await expect(endSession(lecturer.id, "does-not-exist")).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("rejects opening a Question once the Session has ended", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    await endSession(lecturer.id, session.id);
+
+    await expect(
+      openQuestion(lecturer.id, session.id, session.questions[0]!.id)
+    ).rejects.toBeInstanceOf(SessionEndedError);
+  });
+
+  it("rejects closing the open Question once the Session has ended", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    await openQuestion(lecturer.id, session.id, session.questions[0]!.id);
+    await endSession(lecturer.id, session.id);
+
+    await expect(closeQuestion(lecturer.id, session.id)).rejects.toBeInstanceOf(SessionEndedError);
+  });
+
+  it("rejects advancing to the next Question once the Session has ended", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    await openQuestion(lecturer.id, session.id, session.questions[0]!.id);
+    await closeQuestion(lecturer.id, session.id);
+    await endSession(lecturer.id, session.id);
+
+    await expect(nextQuestion(lecturer.id, session.id)).rejects.toBeInstanceOf(SessionEndedError);
   });
 });

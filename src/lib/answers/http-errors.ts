@@ -4,13 +4,18 @@ import {
   InvalidAnswerOptionError,
   NoOpenQuestionError,
   NotFoundError,
+  SessionEndedError,
 } from "@/lib/answers/answer-service";
 
 export function answerServiceErrorResponse(error: unknown): NextResponse | null {
   if (error instanceof InvalidAnswerOptionError) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
-  if (error instanceof NoOpenQuestionError || error instanceof AlreadyAnsweredError) {
+  if (
+    error instanceof NoOpenQuestionError ||
+    error instanceof AlreadyAnsweredError ||
+    error instanceof SessionEndedError
+  ) {
     return NextResponse.json({ error: error.message }, { status: 409 });
   }
   if (error instanceof NotFoundError) {

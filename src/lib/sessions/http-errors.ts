@@ -7,6 +7,7 @@ import {
   QuestionAlreadyOpenError,
   QuestionNotClosedError,
   QuestionNotOpenError,
+  SessionEndedError,
 } from "@/lib/sessions/session-service";
 
 export function sessionServiceErrorResponse(error: unknown): NextResponse | null {
@@ -21,7 +22,8 @@ export function sessionServiceErrorResponse(error: unknown): NextResponse | null
     error instanceof OutOfOrderQuestionError ||
     error instanceof QuestionNotOpenError ||
     error instanceof QuestionNotClosedError ||
-    error instanceof NoNextQuestionError
+    error instanceof NoNextQuestionError ||
+    error instanceof SessionEndedError
   ) {
     return NextResponse.json({ error: error.message }, { status: 409 });
   }

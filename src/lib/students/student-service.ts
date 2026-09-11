@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/db/client";
 import { Prisma } from "@prisma/client";
-import { InvalidInputError, NotFoundError } from "@/lib/errors";
+import { InvalidInputError, NotFoundError, SessionEndedError } from "@/lib/errors";
 import { getSessionByJoinCode } from "@/lib/sessions/session-service";
 
-export { InvalidInputError, NotFoundError };
+export { InvalidInputError, NotFoundError, SessionEndedError };
 export class NicknameTakenError extends Error {}
 export class JoiningClosedError extends Error {}
 
@@ -18,6 +18,9 @@ export async function joinSessionByJoinCode(
   input: { nickname?: string }
 ): Promise<StudentView> {
   const session = await getSessionByJoinCode(joinCode);
+  if (session.ended) {
+    throw new SessionEndedError("This Session has already ended");
+  }
   if (session.joiningClosed) {
     throw new JoiningClosedError(
       "Joining is closed for this Session; the Lecturer has already opened the first Question"

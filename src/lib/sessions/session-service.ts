@@ -1,10 +1,10 @@
 import { randomInt } from "node:crypto";
 import { prisma } from "@/lib/db/client";
 import { Prisma, type DisplayMode, type SetType } from "@prisma/client";
-import { NotFoundError } from "@/lib/errors";
+import { NotFoundError, SessionEndedError } from "@/lib/errors";
 import { getSet } from "@/lib/sets/set-service";
 
-export { NotFoundError };
+export { NotFoundError, SessionEndedError };
 export class AlreadyActiveSessionError extends Error {}
 export class QuestionAlreadyOpenError extends Error {}
 export class OutOfOrderQuestionError extends Error {}
@@ -26,6 +26,7 @@ export type SessionView = {
   questions: SessionQuestionView[];
   openQuestion: SessionQuestionView | null;
   closedQuestion: SessionQuestionView | null;
+  ended: boolean;
 };
 
 // Unlike SessionOptionView, this omits isCorrect: it's shown to Students and
@@ -45,6 +46,7 @@ export type PublicSessionView = {
   // no further Answers can change its outcome, and Analysis (which must show
   // the correct answer for a Question Set) depends on it.
   closedQuestion: SessionQuestionView | null;
+  ended: boolean;
 };
 
 const JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
@@ -98,6 +100,7 @@ type SessionRecord = {
   joinCode: string;
   openQuestionId: string | null;
   closedQuestionId: string | null;
+  endedAt: Date | null;
   questions: {
     id: string;
     prompt: string;
@@ -134,6 +137,7 @@ function toSessionView(session: SessionRecord): SessionView {
     questions,
     openQuestion: questions.find((question) => question.id === session.openQuestionId) ?? null,
     closedQuestion: questions.find((question) => question.id === session.closedQuestionId) ?? null,
+    ended: session.endedAt !== null,
   };
 }
 
@@ -157,6 +161,7 @@ function toPublicSessionView(
         }
       : null,
     closedQuestion: questions.find((question) => question.id === session.closedQuestionId) ?? null,
+    ended: session.endedAt !== null,
   };
 }
 
@@ -167,7 +172,7 @@ export async function startSession(
   const set = await getSet(lecturerId, input.setId);
 
   const session = await runTransactionWithRetry(async (tx) => {
-    const active = await tx.session.findFirst({ where: { lecturerId } });
+    const active = await tx.session.findFirst({ where: { lecturerId, endedAt: null } });
     if (active) {
       throw new AlreadyActiveSessionError(
         "This Lecturer already has an active Session; end it before starting another"
@@ -222,6 +227,13 @@ export async function cancelSession(lecturerId: string, sessionId: string): Prom
     throw new NotFoundError(`No Session ${sessionId} found for this Lecturer`);
   }
 
+  // An ended Session's Questions, Answers, and Analyses must persist for
+  // later Lecturer review (see CONTEXT.md) — cancelling (a hard delete) is
+  // only for abandoning a Session before or during its run, not after.
+  if (session.endedAt) {
+    throw new SessionEndedError("This Session has already ended and can no longer be cancelled");
+  }
+
   try {
     await prisma.session.delete({ where: { id: sessionId } });
   } catch (error) {
@@ -235,7 +247,7 @@ export async function cancelSession(lecturerId: string, sessionId: string): Prom
 export async function getActiveSessionForLecturer(
   lecturerId: string
 ): Promise<{ id: string; title: string } | null> {
-  const session = await prisma.session.findFirst({ where: { lecturerId } });
+  const session = await prisma.session.findFirst({ where: { lecturerId, endedAt: null } });
   return session ? { id: session.id, title: session.title } : null;
 }
 
@@ -295,6 +307,10 @@ export async function openQuestion(
     throw new NotFoundError(`No Session ${sessionId} found for this Lecturer`);
   }
 
+  if (session.endedAt) {
+    throw new SessionEndedError("This Session has already ended");
+  }
+
   if (session.openQuestionId) {
     throw new QuestionAlreadyOpenError("A Question is already open for this Session");
   }
@@ -317,10 +333,11 @@ export async function openQuestion(
 
   // Conditioned on openQuestionId still being null so two concurrent calls
   // can't both open a Question: only one update matches and the other sees
-  // count 0. This also absorbs the Session being cancelled in the same gap
-  // (0 rows match) instead of throwing an unhandled not-found error.
+  // count 0. This also absorbs the Session being cancelled or ended in the
+  // same gap (0 rows match) instead of throwing an unhandled not-found error
+  // or opening a Question for an already-ended Session.
   const result = await prisma.session.updateMany({
-    where: { id: sessionId, openQuestionId: null },
+    where: { id: sessionId, openQuestionId: null, endedAt: null },
     data: {
       openQuestionId: question.id,
       firstQuestionOpenedAt: session.firstQuestionOpenedAt ?? new Date(),
@@ -347,16 +364,21 @@ export async function closeQuestion(lecturerId: string, sessionId: string): Prom
     throw new NotFoundError(`No Session ${sessionId} found for this Lecturer`);
   }
 
+  if (session.endedAt) {
+    throw new SessionEndedError("This Session has already ended");
+  }
+
   if (!session.openQuestionId) {
     throw new QuestionNotOpenError("No Question is currently open for this Session");
   }
 
   const question = session.questions.find((q) => q.id === session.openQuestionId)!;
 
-  // Conditioned on openQuestionId still matching, mirroring the same race
-  // guard as openQuestion: only one concurrent close can win.
+  // Conditioned on openQuestionId still matching and the Session still not
+  // ended, mirroring the same race guard as openQuestion: only one
+  // concurrent close can win, and a concurrent endSession blocks this one.
   const result = await prisma.session.updateMany({
-    where: { id: sessionId, openQuestionId: session.openQuestionId },
+    where: { id: sessionId, openQuestionId: session.openQuestionId, endedAt: null },
     data: { openQuestionId: null, closedQuestionId: question.id },
   });
   if (result.count === 0) {
@@ -378,6 +400,10 @@ export async function nextQuestion(lecturerId: string, sessionId: string): Promi
     throw new NotFoundError(`No Session ${sessionId} found for this Lecturer`);
   }
 
+  if (session.endedAt) {
+    throw new SessionEndedError("This Session has already ended");
+  }
+
   if (!session.closedQuestionId) {
     throw new QuestionNotClosedError("Close the currently open Question before advancing");
   }
@@ -388,10 +414,16 @@ export async function nextQuestion(lecturerId: string, sessionId: string): Promi
     throw new NoNextQuestionError("This Session has no further Questions");
   }
 
-  // Conditioned on closedQuestionId still matching and openQuestionId still
-  // null, mirroring the same race guard as openQuestion/closeQuestion.
+  // Conditioned on closedQuestionId still matching, openQuestionId still
+  // null, and the Session still not ended, mirroring the same race guard as
+  // openQuestion/closeQuestion.
   const result = await prisma.session.updateMany({
-    where: { id: sessionId, closedQuestionId: session.closedQuestionId, openQuestionId: null },
+    where: {
+      id: sessionId,
+      closedQuestionId: session.closedQuestionId,
+      openQuestionId: null,
+      endedAt: null,
+    },
     data: { openQuestionId: next.id, closedQuestionId: null },
   });
   if (result.count === 0) {
@@ -399,4 +431,32 @@ export async function nextQuestion(lecturerId: string, sessionId: string): Promi
   }
 
   return toSessionQuestionView(next);
+}
+
+// The Lecturer explicitly concludes the Session, at any point in its
+// lifecycle — before, during, or after its Questions. Unlike cancelSession,
+// this never deletes the Session: its Questions, Answers, and Analyses must
+// persist for later Lecturer review (see CONTEXT.md). Once ended, no further
+// open/close/next/answer command is accepted (see the endedAt guards above
+// and in answer-service's submitAnswer), and the Lecturer is freed to start
+// a new Session (see getActiveSessionForLecturer and startSession above).
+export async function endSession(lecturerId: string, sessionId: string): Promise<void> {
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  if (!session || session.lecturerId !== lecturerId) {
+    throw new NotFoundError(`No Session ${sessionId} found for this Lecturer`);
+  }
+
+  if (session.endedAt) {
+    throw new SessionEndedError("This Session has already ended");
+  }
+
+  // Conditioned on endedAt still being null, mirroring the same race guard
+  // as openQuestion/closeQuestion/nextQuestion.
+  const result = await prisma.session.updateMany({
+    where: { id: sessionId, endedAt: null },
+    data: { endedAt: new Date() },
+  });
+  if (result.count === 0) {
+    throw new SessionEndedError("This Session has already ended");
+  }
 }

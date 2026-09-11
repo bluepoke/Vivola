@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db/client";
-import { InvalidInputError, NotFoundError } from "@/lib/errors";
+import { InvalidInputError, NotFoundError, SessionEndedError } from "@/lib/errors";
 import { signUp } from "@/lib/auth/lecturer-auth";
 import { addQuestion, createSet } from "@/lib/sets/set-service";
-import { openQuestion, startSession } from "@/lib/sessions/session-service";
+import { endSession, openQuestion, startSession } from "@/lib/sessions/session-service";
 import {
   JoiningClosedError,
   NicknameTakenError,
@@ -140,6 +140,16 @@ describe("joinSessionByJoinCode", () => {
     await expect(
       joinSessionByJoinCode(session.joinCode, { nickname: "Late Ada" })
     ).rejects.toBeInstanceOf(JoiningClosedError);
+  });
+
+  it("rejects joining a Session that has already ended, even before any Question ever opened", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeSurveySession(lecturer.id);
+    await endSession(lecturer.id, session.id);
+
+    await expect(joinSessionByJoinCode(session.joinCode, {})).rejects.toBeInstanceOf(
+      SessionEndedError
+    );
   });
 
   it("throws NotFoundError instead of crashing if the Session is cancelled between the join-code lookup and the Student being created", async () => {

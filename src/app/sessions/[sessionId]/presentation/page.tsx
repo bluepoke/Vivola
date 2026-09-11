@@ -29,7 +29,9 @@ export default async function PresentationPage({
     session.closedQuestion ? getQuestionAnalysis(session.closedQuestion) : Promise.resolve(null),
   ]);
   const leaderboard =
-    session.closedQuestion && session.type === "QUESTION" ? await getLeaderboard(session.id) : null;
+    session.type === "QUESTION" && (session.closedQuestion || session.ended)
+      ? await getLeaderboard(session.id)
+      : null;
 
   return (
     <main>
@@ -43,6 +45,7 @@ export default async function PresentationPage({
         initialTotalStudents={totalStudents}
         initialAnalysis={analysis}
         initialLeaderboard={leaderboard}
+        initialEnded={session.ended}
         lobby={<JoinInfo sessionId={session.id} joinCode={session.joinCode} />}
       />
     </main>

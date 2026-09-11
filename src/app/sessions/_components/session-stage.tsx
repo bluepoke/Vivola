@@ -6,6 +6,7 @@ import type { PublicQuestionView, SetType } from "@/lib/sessions/session-service
 import type { QuestionAnalysisView } from "@/lib/answers/answer-service";
 import type { LeaderboardEntryView } from "@/lib/leaderboard/leaderboard-service";
 import { QuestionAnalysis } from "@/app/_components/question-analysis";
+import { SessionEnded } from "@/app/_components/session-ended";
 
 // Swaps the Presentation view between the join QR code/lobby, the open
 // Question, and the closed Question's Analysis, live, as soon as the
@@ -23,6 +24,7 @@ export function SessionStage({
   initialTotalStudents,
   initialAnalysis,
   initialLeaderboard,
+  initialEnded,
   lobby,
 }: {
   sessionId: string;
@@ -32,6 +34,7 @@ export function SessionStage({
   initialTotalStudents: number;
   initialAnalysis: QuestionAnalysisView | null;
   initialLeaderboard: LeaderboardEntryView[] | null;
+  initialEnded: boolean;
   lobby: ReactNode;
 }) {
   const [question, setQuestion] = useState(initialQuestion);
@@ -39,6 +42,7 @@ export function SessionStage({
   const [totalStudents, setTotalStudents] = useState(initialTotalStudents);
   const [analysis, setAnalysis] = useState(initialAnalysis);
   const [leaderboard, setLeaderboard] = useState(initialLeaderboard);
+  const [ended, setEnded] = useState(initialEnded);
 
   useEffect(() => {
     const socket = io();
@@ -64,11 +68,19 @@ export function SessionStage({
         setLeaderboard(payload.leaderboard);
       }
     );
+    socket.on("session:ended", (payload: { leaderboard: LeaderboardEntryView[] | null }) => {
+      setEnded(true);
+      setLeaderboard(payload.leaderboard);
+    });
 
     return () => {
       socket.disconnect();
     };
   }, [sessionId]);
+
+  if (ended) {
+    return <SessionEnded sessionType={sessionType} leaderboard={leaderboard} />;
+  }
 
   if (analysis) {
     return (

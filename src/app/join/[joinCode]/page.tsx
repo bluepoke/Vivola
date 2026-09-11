@@ -6,6 +6,7 @@ import { getLeaderboard } from "@/lib/leaderboard/leaderboard-service";
 import { getJoinedStudent } from "@/lib/auth/student-session";
 import { JoinForm } from "@/app/join/_components/join-form";
 import { QuestionStage } from "@/app/join/_components/question-stage";
+import { SessionEnded } from "@/app/_components/session-ended";
 
 export default async function JoinPage({
   params,
@@ -38,14 +39,18 @@ export default async function JoinPage({
 
   const closedAnalysis = session.closedQuestion ? await getQuestionAnalysis(session.closedQuestion) : null;
   const leaderboard =
-    session.closedQuestion && session.type === "QUESTION" ? await getLeaderboard(session.id) : null;
+    session.type === "QUESTION" && (session.closedQuestion || session.ended)
+      ? await getLeaderboard(session.id)
+      : null;
 
   return (
     <main>
       <h1>{session.title}</h1>
       <p>{session.type === "SURVEY" ? "Survey Session" : "Quiz Session"}</p>
 
-      {student ? (
+      {session.ended && !student ? (
+        <SessionEnded sessionType={session.type} leaderboard={leaderboard} />
+      ) : student ? (
         <QuestionStage
           sessionId={session.id}
           sessionType={session.type}
@@ -53,6 +58,7 @@ export default async function JoinPage({
           answeredOptionId={answeredOptionId}
           initialClosedAnalysis={closedAnalysis}
           initialLeaderboard={leaderboard}
+          initialEnded={session.ended}
           lobby={
             <section aria-label="Lobby">
               {student.nickname && (

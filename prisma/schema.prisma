@@ -95,6 +95,15 @@ model Session {
   // once the Lecturer advances. Never set at the same time as openQuestionId.
   closedQuestionId String?
 
+  // Set once the Lecturer explicitly ends the Session (a one-way transition,
+  // mirroring firstQuestionOpenedAt above). Unlike cancelSession, ending
+  // never deletes the row: the Session's Questions, Answers, and Analyses
+  // must persist for later Lecturer review (see CONTEXT.md). A non-null
+  // endedAt both blocks further open/close/next/answer actions and excludes
+  // this Session from the "one active Session per Lecturer" check, freeing
+  // the Lecturer to start a new one.
+  endedAt DateTime?
+
   @@index([lecturerId])
 }
 

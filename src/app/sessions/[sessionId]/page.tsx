@@ -10,6 +10,7 @@ import { CancelSessionButton } from "@/app/sessions/_components/cancel-session-b
 import { OpenQuestionButton } from "@/app/sessions/_components/open-question-button";
 import { CloseQuestionButton } from "@/app/sessions/_components/close-question-button";
 import { NextQuestionButton } from "@/app/sessions/_components/next-question-button";
+import { EndSessionButton } from "@/app/sessions/_components/end-session-button";
 import { SessionStage } from "@/app/sessions/_components/session-stage";
 
 export default async function SessionControlPage({
@@ -42,7 +43,9 @@ export default async function SessionControlPage({
     session.closedQuestion ? getQuestionAnalysis(session.closedQuestion) : Promise.resolve(null),
   ]);
   const leaderboard =
-    session.closedQuestion && session.type === "QUESTION" ? await getLeaderboard(session.id) : null;
+    session.type === "QUESTION" && (session.closedQuestion || session.ended)
+      ? await getLeaderboard(session.id)
+      : null;
 
   return (
     <main>
@@ -75,29 +78,37 @@ export default async function SessionControlPage({
           initialTotalStudents={totalStudents}
           initialAnalysis={analysis}
           initialLeaderboard={leaderboard}
+          initialEnded={session.ended}
           lobby={<JoinInfo sessionId={session.id} joinCode={session.joinCode} />}
         />
       )}
 
       <section aria-label="Lecturer controls">
         <h2>Controls</h2>
-        {session.openQuestion ? (
-          <>
-            <p>Open Question: {session.openQuestion.prompt}</p>
-            <CloseQuestionButton sessionId={session.id} />
-          </>
-        ) : session.closedQuestion ? (
-          session.questions.at(-1)?.id === session.closedQuestion.id ? (
-            <p>Ending the Session will appear here as this feature grows.</p>
-          ) : (
-            <NextQuestionButton sessionId={session.id} />
-          )
-        ) : session.questions[0] ? (
-          <OpenQuestionButton sessionId={session.id} questionId={session.questions[0].id} />
+        {session.ended ? (
+          <p>
+            This Session has ended. <Link href="/sets">Start a new Session</Link> from one of your Sets.
+          </p>
         ) : (
-          <p>Add Questions to this Set before opening one.</p>
+          <>
+            {session.openQuestion ? (
+              <>
+                <p>Open Question: {session.openQuestion.prompt}</p>
+                <CloseQuestionButton sessionId={session.id} />
+              </>
+            ) : session.closedQuestion ? (
+              session.questions.at(-1)?.id !== session.closedQuestion.id && (
+                <NextQuestionButton sessionId={session.id} />
+              )
+            ) : session.questions[0] ? (
+              <OpenQuestionButton sessionId={session.id} questionId={session.questions[0].id} />
+            ) : (
+              <p>Add Questions to this Set before opening one.</p>
+            )}
+            <EndSessionButton sessionId={session.id} />
+            <CancelSessionButton sessionId={session.id} />
+          </>
         )}
-        <CancelSessionButton sessionId={session.id} />
       </section>
     </main>
   );
