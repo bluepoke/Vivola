@@ -19,13 +19,13 @@ export function PastSessionAnalyses({
   leaderboard: LeaderboardEntryView[] | null;
 }) {
   return (
-    <section aria-label="Past Session">
+    <section aria-label="Past Session" style={{ marginTop: 20 }}>
       {analyses.map((analysis) => (
         <QuestionAnalysis key={analysis.id} analysis={analysis} showCorrectAnswer={sessionType === "QUESTION"} />
       ))}
       {sessionType === "QUESTION" && (
-        <section aria-label="Final leaderboard">
-          <h2>Final Leaderboard</h2>
+        <section aria-label="Final leaderboard" className="card">
+          <h2 style={{ fontSize: 22 }}>Final Leaderboard</h2>
           <Leaderboard entries={leaderboard} />
         </section>
       )}

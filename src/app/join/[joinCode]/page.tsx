@@ -7,6 +7,8 @@ import { getJoinedStudent } from "@/lib/auth/student-session";
 import { JoinForm } from "@/app/join/_components/join-form";
 import { QuestionStage } from "@/app/join/_components/question-stage";
 import { SessionEnded } from "@/app/_components/session-ended";
+import { SiteHeader } from "@/app/_components/site-header";
+import { sessionTypeLabel } from "@/lib/sessions/session-service";
 
 export default async function JoinPage({
   params,
@@ -44,35 +46,42 @@ export default async function JoinPage({
       : null;
 
   return (
-    <main>
-      <h1>{session.title}</h1>
-      <p>{session.type === "SURVEY" ? "Survey Session" : "Quiz Session"}</p>
+    <>
+      <SiteHeader />
+      <main className="page-narrow">
+        <h1>{session.title}</h1>
+        <p>
+          <span className="tag tag-neutral">{sessionTypeLabel(session.type)}</span>
+        </p>
 
-      {session.ended && !student ? (
-        <SessionEnded sessionType={session.type} leaderboard={leaderboard} />
-      ) : student ? (
-        <QuestionStage
-          sessionId={session.id}
-          sessionType={session.type}
-          initialQuestion={session.openQuestion}
-          answeredOptionId={answeredOptionId}
-          initialClosedAnalysis={closedAnalysis}
-          initialLeaderboard={leaderboard}
-          initialEnded={session.ended}
-          lobby={
-            <section aria-label="Lobby">
-              {student.nickname && (
-                <p>
-                  You&apos;re in as <strong>{student.nickname}</strong>.
+        {session.ended && !student ? (
+          <SessionEnded sessionType={session.type} leaderboard={leaderboard} />
+        ) : student ? (
+          <QuestionStage
+            sessionId={session.id}
+            sessionType={session.type}
+            initialQuestion={session.openQuestion}
+            answeredOptionId={answeredOptionId}
+            initialClosedAnalysis={closedAnalysis}
+            initialLeaderboard={leaderboard}
+            initialEnded={session.ended}
+            lobby={
+              <section aria-label="Lobby" className="card" style={{ textAlign: "center", alignItems: "center" }}>
+                {student.nickname && (
+                  <p style={{ margin: 0 }}>
+                    You&apos;re in as <strong>{student.nickname}</strong>.
+                  </p>
+                )}
+                <p className="text-muted" style={{ margin: 0 }}>
+                  Waiting for the Lecturer to start the first Question&hellip;
                 </p>
-              )}
-              <p>You&apos;re in! Waiting for the Lecturer to start the first Question&hellip;</p>
-            </section>
-          }
-        />
-      ) : (
-        <JoinForm joinCode={joinCode} sessionType={session.type} />
-      )}
-    </main>
+              </section>
+            }
+          />
+        ) : (
+          <JoinForm joinCode={joinCode} sessionType={session.type} />
+        )}
+      </main>
+    </>
   );
 }

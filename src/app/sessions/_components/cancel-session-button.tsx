@@ -16,7 +16,7 @@ export function CancelSessionButton({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <button type="button" onClick={handleCancel} disabled={cancelling}>
+    <button type="button" className="btn btn-danger" onClick={handleCancel} disabled={cancelling}>
       Cancel Session
     </button>
   );

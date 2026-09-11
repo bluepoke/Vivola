@@ -15,15 +15,17 @@ export function SessionEnded({
   leaderboard: LeaderboardEntryView[] | null;
 }) {
   return (
-    <section aria-label="Session ended">
-      <h2>Session ended</h2>
+    <section aria-label="Session ended" className="card" style={{ textAlign: "center", gap: 16 }}>
+      <span className="tag tag-neutral" style={{ alignSelf: "center" }}>
+        Session complete
+      </span>
       {sessionType === "QUESTION" ? (
-        <section aria-label="Leaderboard">
+        <section aria-label="Leaderboard" style={{ textAlign: "left" }}>
           <h3>Final Leaderboard</h3>
           <Leaderboard entries={leaderboard} />
         </section>
       ) : (
-        <p>Thanks for participating!</p>
+        <p style={{ margin: 0 }}>Thanks for participating!</p>
       )}
     </section>
   );

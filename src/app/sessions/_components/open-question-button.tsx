@@ -36,8 +36,12 @@ export function OpenQuestionButton({
 
   return (
     <div>
-      {error && <p role="alert">{error}</p>}
-      <button type="button" onClick={handleOpen} disabled={opening}>
+      {error && (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      )}
+      <button type="button" className="btn btn-primary" onClick={handleOpen} disabled={opening}>
         Open Question
       </button>
     </div>

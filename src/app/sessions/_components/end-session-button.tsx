@@ -29,8 +29,12 @@ export function EndSessionButton({ sessionId }: { sessionId: string }) {
 
   return (
     <div>
-      {error && <p role="alert">{error}</p>}
-      <button type="button" onClick={handleEnd} disabled={ending}>
+      {error && (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      )}
+      <button type="button" className="btn btn-secondary" onClick={handleEnd} disabled={ending}>
         End Session
       </button>
     </div>

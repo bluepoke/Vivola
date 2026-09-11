@@ -36,24 +36,33 @@ export function CreateSetForm() {
 
   return (
     <form onSubmit={handleSubmit}>
-      <label>
-        Title
+      <div className="field">
+        <label>Title</label>
         <input
+          className="input"
           type="text"
           required
           value={title}
           onChange={(event) => setTitle(event.target.value)}
         />
-      </label>
-      <label>
-        Type
-        <select value={type} onChange={(event) => setType(event.target.value as SetType)}>
+      </div>
+      <div className="field">
+        <label>Type</label>
+        <select
+          className="input"
+          value={type}
+          onChange={(event) => setType(event.target.value as SetType)}
+        >
           <option value="SURVEY">Survey Set (opinions, no correct answer)</option>
           <option value="QUESTION">Question Set (quiz, one correct answer per question)</option>
         </select>
-      </label>
-      {error ? <p role="alert">{error}</p> : null}
-      <button type="submit" disabled={submitting}>
+      </div>
+      {error ? (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <button type="submit" className="btn btn-primary" disabled={submitting}>
         Create Set
       </button>
     </form>

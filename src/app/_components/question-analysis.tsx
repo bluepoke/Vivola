@@ -19,28 +19,51 @@ export function QuestionAnalysis({
   leaderboard?: LeaderboardEntryView[] | null;
 }) {
   return (
-    <section aria-label="Analysis">
-      <h2>{analysis.prompt}</h2>
-      <ul>
+    <section aria-label="Analysis" className="card" style={{ marginBottom: 16 }}>
+      <h6 className="text-muted" style={{ margin: 0 }}>
+        Analysis
+      </h6>
+      <h3 style={{ margin: 0 }}>{analysis.prompt}</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {analysis.options.map((option) => {
           const isOwnAnswer = option.id === ownAnswerOptionId;
+          const isCorrect = showCorrectAnswer && option.isCorrect;
+          const pct = analysis.totalAnswered === 0 ? 0 : Math.round((option.count / analysis.totalAnswered) * 100);
           return (
-            <li key={option.id}>
-              {option.text}: {option.count}
-              {showCorrectAnswer && option.isCorrect && " — Correct answer"}
-              {isOwnAnswer && " (Your Answer"}
-              {isOwnAnswer && showCorrectAnswer && (option.isCorrect ? ", correct!" : ", incorrect")}
-              {isOwnAnswer && ")"}
-            </li>
+            <div key={option.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700 }}>
+                <span>
+                  {option.text}
+                  {isCorrect && <span style={{ color: "var(--color-accent-700)" }}> ✓ correct</span>}
+                  {isOwnAnswer && (
+                    <span className="tag tag-neutral" style={{ marginLeft: 8 }}>
+                      Your Answer{showCorrectAnswer ? (option.isCorrect ? " · correct" : " · incorrect") : ""}
+                    </span>
+                  )}
+                </span>
+                <span>
+                  {option.count} · {pct}%
+                </span>
+              </div>
+              <div style={{ height: 20, background: "var(--color-neutral-200)" }}>
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${pct}%`,
+                    background: isCorrect ? "var(--color-accent)" : "var(--color-neutral-500)",
+                  }}
+                />
+              </div>
+            </div>
           );
         })}
-      </ul>
-      <p>
+      </div>
+      <p className="text-muted" style={{ margin: 0 }}>
         {analysis.totalAnswered} student{analysis.totalAnswered === 1 ? "" : "s"} answered.
       </p>
       {leaderboard && (
         <section aria-label="Leaderboard">
-          <h3>Leaderboard</h3>
+          <h3 style={{ fontSize: 17 }}>Leaderboard</h3>
           <Leaderboard entries={leaderboard} />
         </section>
       )}

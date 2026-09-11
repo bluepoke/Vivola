@@ -48,14 +48,16 @@ export function SetDetail({ set }: { set: SetView }) {
   }
 
   return (
-    <main>
+    <main className="page">
       <p>
         <Link href="/sets">← Back to My Sets</Link>
       </p>
       <h1>{set.title}</h1>
-      <p>{set.type === "SURVEY" ? "Survey Set" : "Question Set"}</p>
+      <p>
+        <span className="tag tag-neutral">{set.type === "SURVEY" ? "Survey Set" : "Question Set"}</span>
+      </p>
 
-      <ol>
+      <ol className="card-list" style={{ listStyle: "none", padding: 0, marginBottom: 20 }}>
         {set.questions.map((question, index) =>
           editingId === question.id ? (
             <li key={question.id}>
@@ -68,32 +70,46 @@ export function SetDetail({ set }: { set: SetView }) {
               />
             </li>
           ) : (
-            <li key={question.id}>
-              <p>{question.prompt}</p>
-              <ul>
+            <li key={question.id} className="card">
+              <p className="card-title" style={{ margin: 0 }}>
+                {question.prompt}
+              </p>
+              <ul style={{ margin: 0, paddingLeft: 20 }}>
                 {question.options.map((option) => (
-                  <li key={option.id}>
+                  <li key={option.id} style={{ fontSize: 13 }}>
                     {option.text}
                     {option.isCorrect ? " (correct)" : ""}
                   </li>
                 ))}
               </ul>
-              <button type="button" onClick={() => setEditingId(question.id)}>
-                Edit
-              </button>
-              <button type="button" onClick={() => handleDeleteQuestion(question.id)}>
-                Delete
-              </button>
-              <button type="button" disabled={index === 0} onClick={() => handleMove(index, -1)}>
-                Move up
-              </button>
-              <button
-                type="button"
-                disabled={index === set.questions.length - 1}
-                onClick={() => handleMove(index, 1)}
-              >
-                Move down
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingId(question.id)}>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => handleDeleteQuestion(question.id)}
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={index === 0}
+                  onClick={() => handleMove(index, -1)}
+                >
+                  Move up
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={index === set.questions.length - 1}
+                  onClick={() => handleMove(index, 1)}
+                >
+                  Move down
+                </button>
+              </div>
             </li>
           )
         )}
@@ -107,16 +123,18 @@ export function SetDetail({ set }: { set: SetView }) {
           onCancel={() => setEditingId(null)}
         />
       ) : (
-        <button type="button" onClick={() => setEditingId("new")}>
+        <button type="button" className="btn btn-secondary" onClick={() => setEditingId("new")}>
           Add question
         </button>
       )}
 
-      <button type="button" onClick={handleDeleteSet} disabled={deleting}>
+      <hr className="hr" />
+
+      <button type="button" className="btn btn-danger" onClick={handleDeleteSet} disabled={deleting}>
         Delete Set
       </button>
 
-      <h2>Start a Session</h2>
+      <h2 style={{ marginTop: 32 }}>Start a Session</h2>
       <StartSessionForm setId={set.id} />
     </main>
   );

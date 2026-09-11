@@ -40,12 +40,13 @@ export function AnswerForm({
   if (answeredOptionId) {
     const chosen = question.options.find((option) => option.id === answeredOptionId);
     return (
-      <section aria-label="Your Answer">
-        <h2>{question.prompt}</h2>
-        <p>
-          Your Answer: <strong>{chosen?.text}</strong>
-        </p>
-        <p>Your Answer is locked in.</p>
+      <section aria-label="Your Answer" className="card" style={{ textAlign: "center" }}>
+        <span className="tag tag-accent" style={{ alignSelf: "center" }}>
+          Answer locked in
+        </span>
+        <h2 style={{ margin: 0 }}>{question.prompt}</h2>
+        <p style={{ margin: 0, fontWeight: 700 }}>{chosen?.text}</p>
+        <p className="text-muted" style={{ margin: 0 }}>Waiting for other participants&hellip;</p>
       </section>
     );
   }
@@ -73,22 +74,46 @@ export function AnswerForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} aria-label="Answer this Question">
-      <h2>{question.prompt}</h2>
-      {question.options.map((option) => (
-        <label key={option.id} style={{ display: "block" }}>
-          <input
-            type="radio"
-            name="answerOptionId"
-            value={option.id}
-            checked={selectedOptionId === option.id}
-            onChange={() => setSelectedOptionId(option.id)}
-          />
-          {option.text}
-        </label>
-      ))}
-      {error && <p role="alert">{error}</p>}
-      <button type="submit" disabled={submitting || !selectedOptionId}>
+    <form onSubmit={handleSubmit} aria-label="Answer this Question" className="card">
+      <h2 style={{ margin: 0 }}>{question.prompt}</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {question.options.map((option) => {
+          const selected = selectedOptionId === option.id;
+          return (
+            <label
+              key={option.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                cursor: "pointer",
+                border: "2px solid var(--color-text)",
+                padding: "12px 14px",
+                fontSize: 14,
+                fontWeight: 700,
+                background: selected ? "var(--color-accent)" : "transparent",
+                color: selected ? "#fff" : "var(--color-text)",
+              }}
+            >
+              <input
+                type="radio"
+                name="answerOptionId"
+                value={option.id}
+                checked={selected}
+                onChange={() => setSelectedOptionId(option.id)}
+                style={{ accentColor: "var(--color-accent)" }}
+              />
+              {option.text}
+            </label>
+          );
+        })}
+      </div>
+      {error && (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      )}
+      <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !selectedOptionId}>
         Submit Answer
       </button>
     </form>

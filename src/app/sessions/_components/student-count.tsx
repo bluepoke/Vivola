@@ -16,5 +16,9 @@ export function StudentCount({ sessionId, initialCount }: { sessionId: string; i
     };
   }, [sessionId]);
 
-  return <p>{count === 1 ? "1 Student has joined" : `${count} Students have joined`}</p>;
+  return (
+    <p className="text-muted" style={{ margin: 0, fontWeight: 700 }}>
+      {count === 1 ? "1 Student has joined" : `${count} Students have joined`}
+    </p>
+  );
 }

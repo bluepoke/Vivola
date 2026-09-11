@@ -28,8 +28,12 @@ export function CloseQuestionButton({ sessionId }: { sessionId: string }) {
 
   return (
     <div>
-      {error && <p role="alert">{error}</p>}
-      <button type="button" onClick={handleClose} disabled={closing}>
+      {error && (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      )}
+      <button type="button" className="btn btn-primary" onClick={handleClose} disabled={closing}>
         Close Question
       </button>
     </div>

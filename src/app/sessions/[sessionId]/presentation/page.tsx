@@ -5,6 +5,8 @@ import { getStudentCount } from "@/lib/students/student-service";
 import { getLeaderboard } from "@/lib/leaderboard/leaderboard-service";
 import { JoinInfo } from "@/app/sessions/_components/join-info";
 import { SessionStage } from "@/app/sessions/_components/session-stage";
+import { SiteHeader } from "@/app/_components/site-header";
+import { sessionTypeLabel } from "@/lib/sessions/session-service";
 
 export default async function PresentationPage({
   params,
@@ -34,20 +36,27 @@ export default async function PresentationPage({
       : null;
 
   return (
-    <main>
-      <h1>{session.title}</h1>
-      <p>{session.type === "SURVEY" ? "Survey Session" : "Quiz Session"}</p>
-      <SessionStage
-        sessionId={session.id}
-        sessionType={session.type}
-        initialQuestion={session.openQuestion}
-        initialAnsweredCount={answeredCount}
-        initialTotalStudents={totalStudents}
-        initialAnalysis={analysis}
-        initialLeaderboard={leaderboard}
-        initialEnded={session.ended}
-        lobby={<JoinInfo sessionId={session.id} joinCode={session.joinCode} />}
-      />
-    </main>
+    <>
+      <SiteHeader />
+      <main className="page" style={{ textAlign: "center" }}>
+        <h1>{session.title}</h1>
+        <p>
+          <span className="tag tag-neutral">{sessionTypeLabel(session.type)}</span>
+        </p>
+        <div style={{ textAlign: "left", maxWidth: 560, margin: "0 auto" }}>
+          <SessionStage
+            sessionId={session.id}
+            sessionType={session.type}
+            initialQuestion={session.openQuestion}
+            initialAnsweredCount={answeredCount}
+            initialTotalStudents={totalStudents}
+            initialAnalysis={analysis}
+            initialLeaderboard={leaderboard}
+            initialEnded={session.ended}
+            lobby={<JoinInfo sessionId={session.id} joinCode={session.joinCode} />}
+          />
+        </div>
+      </main>
+    </>
   );
 }

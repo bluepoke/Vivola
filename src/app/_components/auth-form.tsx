@@ -41,26 +41,32 @@ export function AuthForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <label>
-        Email
+      <div className="field">
+        <label>Email</label>
         <input
+          className="input"
           type="email"
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
-      </label>
-      <label>
-        Password
+      </div>
+      <div className="field">
+        <label>Password</label>
         <input
+          className="input"
           type="password"
           required
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-      </label>
-      {error ? <p role="alert">{error}</p> : null}
-      <button type="submit" disabled={submitting}>
+      </div>
+      {error ? (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
         {submitLabel}
       </button>
     </form>

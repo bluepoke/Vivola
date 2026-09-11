@@ -12,10 +12,26 @@ export async function JoinInfo({ sessionId, joinCode }: { sessionId: string; joi
   ]);
 
   return (
-    <div>
-      <div dangerouslySetInnerHTML={{ __html: qrCodeSvg }} />
-      <p>Join at {joinUrl}</p>
-      <p style={{ fontSize: "2rem", letterSpacing: "0.2em" }}>{joinCode}</p>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center" }}>
+      <div
+        className="qr-frame"
+        style={{ width: 220, border: "2px solid var(--color-text)", padding: 12, background: "#fff" }}
+        dangerouslySetInnerHTML={{ __html: qrCodeSvg }}
+      />
+      <p className="text-muted" style={{ margin: 0 }}>
+        Join at {joinUrl}
+      </p>
+      <p
+        style={{
+          fontFamily: "var(--font-heading)",
+          fontWeight: 800,
+          fontSize: "2rem",
+          letterSpacing: "0.2em",
+          margin: 0,
+        }}
+      >
+        {joinCode}
+      </p>
       <StudentCount sessionId={sessionId} initialCount={studentCount} />
     </div>
   );

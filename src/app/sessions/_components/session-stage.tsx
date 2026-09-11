@@ -92,15 +92,22 @@ export function SessionStage({
     return <>{lobby}</>;
   }
 
+  const answeredPct = totalStudents === 0 ? 0 : Math.round((answeredCount / totalStudents) * 100);
+
   return (
-    <section aria-label="Open Question">
-      <h2>{question.prompt}</h2>
-      <ul>
+    <section aria-label="Open Question" className="card" style={{ gap: 14 }}>
+      <h2 style={{ margin: 0 }}>{question.prompt}</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {question.options.map((option) => (
-          <li key={option.id}>{option.text}</li>
+          <div key={option.id} style={{ border: "2px solid var(--color-text)", padding: "12px 14px", fontSize: 14, fontWeight: 700 }}>
+            {option.text}
+          </div>
         ))}
-      </ul>
-      <p>
+      </div>
+      <div style={{ height: 6, background: "var(--color-neutral-200)" }}>
+        <div style={{ height: "100%", width: `${answeredPct}%`, background: "var(--color-accent)" }} />
+      </div>
+      <p className="text-muted" style={{ margin: 0, fontWeight: 700 }}>
         Answered: {answeredCount}/{totalStudents}
       </p>
     </section>

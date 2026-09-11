@@ -32,20 +32,25 @@ export function JoinForm({ joinCode, sessionType }: { joinCode: string; sessionT
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} className="card">
       {sessionType === "QUESTION" && (
-        <label>
-          Nickname
+        <div className="field">
+          <label>Nickname</label>
           <input
+            className="input"
             type="text"
             value={nickname}
             onChange={(event) => setNickname(event.target.value)}
             required
           />
-        </label>
+        </div>
       )}
-      {error && <p role="alert">{error}</p>}
-      <button type="submit" disabled={joining}>
+      {error && (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      )}
+      <button type="submit" className="btn btn-primary btn-block" disabled={joining}>
         Join
       </button>
     </form>

@@ -35,18 +35,23 @@ export function StartSessionForm({ setId }: { setId: string }) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <label>
-        Display mode
+      <div className="field">
+        <label>Display mode</label>
         <select
+          className="input"
           value={displayMode}
           onChange={(event) => setDisplayMode(event.target.value as DisplayMode)}
         >
           <option value="SPLIT">Split (separate Presentation and control screens)</option>
           <option value="COMBINED">Combined (one screen for both)</option>
         </select>
-      </label>
-      {error ? <p role="alert">{error}</p> : null}
-      <button type="submit" disabled={submitting}>
+      </div>
+      {error ? (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <button type="submit" className="btn btn-primary" disabled={submitting}>
         Start Session
       </button>
     </form>

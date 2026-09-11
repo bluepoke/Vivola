@@ -28,8 +28,12 @@ export function NextQuestionButton({ sessionId }: { sessionId: string }) {
 
   return (
     <div>
-      {error && <p role="alert">{error}</p>}
-      <button type="button" onClick={handleNext} disabled={advancing}>
+      {error && (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      )}
+      <button type="button" className="btn btn-primary" onClick={handleNext} disabled={advancing}>
         Next Question
       </button>
     </div>
