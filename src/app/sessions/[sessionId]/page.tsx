@@ -2,11 +2,14 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireLecturer } from "@/lib/auth/session";
 import { NotFoundError, getSession } from "@/lib/sessions/session-service";
-import { getAnswerCount } from "@/lib/answers/answer-service";
+import { getAnswerCount, getQuestionAnalysis } from "@/lib/answers/answer-service";
 import { getStudentCount } from "@/lib/students/student-service";
+import { getLeaderboard } from "@/lib/leaderboard/leaderboard-service";
 import { JoinInfo } from "@/app/sessions/_components/join-info";
 import { CancelSessionButton } from "@/app/sessions/_components/cancel-session-button";
 import { OpenQuestionButton } from "@/app/sessions/_components/open-question-button";
+import { CloseQuestionButton } from "@/app/sessions/_components/close-question-button";
+import { NextQuestionButton } from "@/app/sessions/_components/next-question-button";
 import { SessionStage } from "@/app/sessions/_components/session-stage";
 
 export default async function SessionControlPage({
@@ -33,10 +36,13 @@ export default async function SessionControlPage({
 
   const presentationUrl = `/sessions/${session.id}/presentation`;
 
-  const [answeredCount, totalStudents] = await Promise.all([
+  const [answeredCount, totalStudents, analysis] = await Promise.all([
     session.openQuestion ? getAnswerCount(session.openQuestion.id) : Promise.resolve(0),
     getStudentCount(session.id),
+    session.closedQuestion ? getQuestionAnalysis(session.closedQuestion) : Promise.resolve(null),
   ]);
+  const leaderboard =
+    session.closedQuestion && session.type === "QUESTION" ? await getLeaderboard(session.id) : null;
 
   return (
     <main>
@@ -52,6 +58,7 @@ export default async function SessionControlPage({
       ) : (
         <SessionStage
           sessionId={session.id}
+          sessionType={session.type}
           initialQuestion={
             session.openQuestion
               ? {
@@ -66,6 +73,8 @@ export default async function SessionControlPage({
           }
           initialAnsweredCount={answeredCount}
           initialTotalStudents={totalStudents}
+          initialAnalysis={analysis}
+          initialLeaderboard={leaderboard}
           lobby={<JoinInfo sessionId={session.id} joinCode={session.joinCode} />}
         />
       )}
@@ -73,13 +82,21 @@ export default async function SessionControlPage({
       <section aria-label="Lecturer controls">
         <h2>Controls</h2>
         {session.openQuestion ? (
-          <p>Open Question: {session.openQuestion.prompt}</p>
+          <>
+            <p>Open Question: {session.openQuestion.prompt}</p>
+            <CloseQuestionButton sessionId={session.id} />
+          </>
+        ) : session.closedQuestion ? (
+          session.questions.at(-1)?.id === session.closedQuestion.id ? (
+            <p>Ending the Session will appear here as this feature grows.</p>
+          ) : (
+            <NextQuestionButton sessionId={session.id} />
+          )
         ) : session.questions[0] ? (
           <OpenQuestionButton sessionId={session.id} questionId={session.questions[0].id} />
         ) : (
           <p>Add Questions to this Set before opening one.</p>
         )}
-        <p>Closing and advancing Questions will appear here as this feature grows.</p>
         <CancelSessionButton sessionId={session.id} />
       </section>
     </main>

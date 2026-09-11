@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db/client";
 import { NotFoundError } from "@/lib/errors";
 import { signUp } from "@/lib/auth/lecturer-auth";
 import { addQuestion, createSet } from "@/lib/sets/set-service";
-import { openQuestion, startSession } from "@/lib/sessions/session-service";
+import { closeQuestion, openQuestion, startSession } from "@/lib/sessions/session-service";
 import { joinSessionByJoinCode } from "@/lib/students/student-service";
 import {
   AlreadyAnsweredError,
@@ -11,6 +11,7 @@ import {
   NoOpenQuestionError,
   getAnswerCount,
   getAnswerForStudent,
+  getQuestionAnalysis,
   submitAnswer,
 } from "@/lib/answers/answer-service";
 
@@ -150,5 +151,45 @@ describe("getAnswerCount", () => {
     await submitAnswer(session.id, grace.id, { answerOptionId: firstQuestion!.options[1]!.id });
 
     await expect(getAnswerCount(firstQuestion!.id)).resolves.toBe(2);
+  });
+});
+
+describe("getQuestionAnalysis", () => {
+  it("counts Answers per option, revealing which option is correct", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithTwoQuestions(lecturer.id);
+    const question = session.questions[0]!;
+    const ada = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
+    const grace = await joinSessionByJoinCode(session.joinCode, { nickname: "Grace" });
+    const ida = await joinSessionByJoinCode(session.joinCode, { nickname: "Ida" });
+    await openQuestion(lecturer.id, session.id, question.id);
+    await submitAnswer(session.id, ada.id, { answerOptionId: question.options[0]!.id });
+    await submitAnswer(session.id, grace.id, { answerOptionId: question.options[1]!.id });
+    await submitAnswer(session.id, ida.id, { answerOptionId: question.options[1]!.id });
+    const closed = await closeQuestion(lecturer.id, session.id);
+
+    const analysis = await getQuestionAnalysis(closed);
+
+    expect(analysis.totalAnswered).toBe(3);
+    expect(analysis.options.map((o) => [o.text, o.count, o.isCorrect])).toEqual([
+      ["3", 1, false],
+      ["4", 2, true],
+    ]);
+  });
+
+  it("excludes Students who submitted no Answer from the distribution and total", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithTwoQuestions(lecturer.id);
+    const question = session.questions[0]!;
+    const ada = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
+    await joinSessionByJoinCode(session.joinCode, { nickname: "Grace" });
+    await openQuestion(lecturer.id, session.id, question.id);
+    await submitAnswer(session.id, ada.id, { answerOptionId: question.options[0]!.id });
+    const closed = await closeQuestion(lecturer.id, session.id);
+
+    const analysis = await getQuestionAnalysis(closed);
+
+    expect(analysis.totalAnswered).toBe(1);
+    expect(analysis.options.map((o) => o.count)).toEqual([1, 0]);
   });
 });

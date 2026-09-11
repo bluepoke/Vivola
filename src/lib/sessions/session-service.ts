@@ -8,6 +8,9 @@ export { NotFoundError };
 export class AlreadyActiveSessionError extends Error {}
 export class QuestionAlreadyOpenError extends Error {}
 export class OutOfOrderQuestionError extends Error {}
+export class QuestionNotOpenError extends Error {}
+export class QuestionNotClosedError extends Error {}
+export class NoNextQuestionError extends Error {}
 
 export type { DisplayMode, SetType };
 
@@ -22,12 +25,13 @@ export type SessionView = {
   joinCode: string;
   questions: SessionQuestionView[];
   openQuestion: SessionQuestionView | null;
+  closedQuestion: SessionQuestionView | null;
 };
 
 // Unlike SessionOptionView, this omits isCorrect: it's shown to Students and
 // on the Presentation view while a Quiz Session Question is still open, and
-// must not leak the correct answer before the Question closes and its
-// Analysis is revealed (a later ticket).
+// must not leak the correct answer before the Question closes — at which
+// point closedQuestion (below) reveals it as part of the Analysis.
 export type PublicOptionView = { id: string; text: string };
 export type PublicQuestionView = { id: string; prompt: string; options: PublicOptionView[] };
 export type PublicSessionView = {
@@ -37,6 +41,10 @@ export type PublicSessionView = {
   joinCode: string;
   joiningClosed: boolean;
   openQuestion: PublicQuestionView | null;
+  // Unlike openQuestion, this reveals isCorrect: the Question is closed, so
+  // no further Answers can change its outcome, and Analysis (which must show
+  // the correct answer for a Question Set) depends on it.
+  closedQuestion: SessionQuestionView | null;
 };
 
 const JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
@@ -89,6 +97,7 @@ type SessionRecord = {
   displayMode: DisplayMode;
   joinCode: string;
   openQuestionId: string | null;
+  closedQuestionId: string | null;
   questions: {
     id: string;
     prompt: string;
@@ -96,8 +105,12 @@ type SessionRecord = {
   }[];
 };
 
-function toSessionView(session: SessionRecord): SessionView {
-  const questions = session.questions.map((question) => ({
+function toSessionQuestionView(question: {
+  id: string;
+  prompt: string;
+  options: { id: string; text: string; isCorrect: boolean }[];
+}): SessionQuestionView {
+  return {
     id: question.id,
     prompt: question.prompt,
     options: question.options.map((option) => ({
@@ -105,7 +118,11 @@ function toSessionView(session: SessionRecord): SessionView {
       text: option.text,
       isCorrect: option.isCorrect,
     })),
-  }));
+  };
+}
+
+function toSessionView(session: SessionRecord): SessionView {
+  const questions = session.questions.map(toSessionQuestionView);
 
   return {
     id: session.id,
@@ -116,13 +133,15 @@ function toSessionView(session: SessionRecord): SessionView {
     joinCode: session.joinCode,
     questions,
     openQuestion: questions.find((question) => question.id === session.openQuestionId) ?? null,
+    closedQuestion: questions.find((question) => question.id === session.closedQuestionId) ?? null,
   };
 }
 
 function toPublicSessionView(
   session: SessionRecord & { firstQuestionOpenedAt: Date | null }
 ): PublicSessionView {
-  const openQuestion = session.questions.find((question) => question.id === session.openQuestionId);
+  const questions = session.questions.map(toSessionQuestionView);
+  const openQuestion = questions.find((question) => question.id === session.openQuestionId);
 
   return {
     id: session.id,
@@ -137,6 +156,7 @@ function toPublicSessionView(
           options: openQuestion.options.map((option) => ({ id: option.id, text: option.text })),
         }
       : null,
+    closedQuestion: questions.find((question) => question.id === session.closedQuestionId) ?? null,
   };
 }
 
@@ -219,6 +239,20 @@ export async function getActiveSessionForLecturer(
   return session ? { id: session.id, title: session.title } : null;
 }
 
+// A lightweight scalar-only lookup for callers that only need the Session's
+// type (e.g. deciding whether to compute a Leaderboard) and would otherwise
+// have to pay for a full sessionInclude fetch of every Question and option.
+export async function getSessionType(lecturerId: string, sessionId: string): Promise<SetType> {
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: { lecturerId: true, type: true },
+  });
+  if (!session || session.lecturerId !== lecturerId) {
+    throw new NotFoundError(`No Session ${sessionId} found for this Lecturer`);
+  }
+  return session.type;
+}
+
 export async function getPublicSession(sessionId: string): Promise<PublicSessionView> {
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
@@ -245,8 +279,9 @@ export async function getSessionByJoinCode(joinCode: string): Promise<PublicSess
 // on the Presentation view and every joined Student's device, and — if it's
 // the Session's first Question — permanently closing joining. Questions must
 // be opened in their fixed authoring order; there is no reorder/skip command
-// (see CONTEXT.md), and only the first Question can be opened until closing
-// a Question (a later ticket) clears openQuestionId.
+// (see CONTEXT.md). This command only ever opens the first Question — once
+// closeQuestion has closed it, nextQuestion (below) takes over for the rest
+// of the Session's Questions.
 export async function openQuestion(
   lecturerId: string,
   sessionId: string,
@@ -262,6 +297,12 @@ export async function openQuestion(
 
   if (session.openQuestionId) {
     throw new QuestionAlreadyOpenError("A Question is already open for this Session");
+  }
+
+  if (session.closedQuestionId) {
+    throw new OutOfOrderQuestionError(
+      "The first Question has already been closed; use nextQuestion to advance"
+    );
   }
 
   const question = session.questions.find((q) => q.id === questionId);
@@ -289,13 +330,73 @@ export async function openQuestion(
     throw new QuestionAlreadyOpenError("A Question is already open for this Session");
   }
 
-  return {
-    id: question.id,
-    prompt: question.prompt,
-    options: question.options.map((option) => ({
-      id: option.id,
-      text: option.text,
-      isCorrect: option.isCorrect,
-    })),
-  };
+  return toSessionQuestionView(question);
+}
+
+// Closes the Session's currently open Question: no further Answers are
+// accepted for it (submitAnswer requires openQuestionId), and it becomes the
+// Session's closedQuestion — the Question whose Analysis is now displayed on
+// the Presentation view and mirrored to each Student, until the Lecturer
+// calls nextQuestion.
+export async function closeQuestion(lecturerId: string, sessionId: string): Promise<SessionQuestionView> {
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    include: sessionInclude,
+  });
+  if (!session || session.lecturerId !== lecturerId) {
+    throw new NotFoundError(`No Session ${sessionId} found for this Lecturer`);
+  }
+
+  if (!session.openQuestionId) {
+    throw new QuestionNotOpenError("No Question is currently open for this Session");
+  }
+
+  const question = session.questions.find((q) => q.id === session.openQuestionId)!;
+
+  // Conditioned on openQuestionId still matching, mirroring the same race
+  // guard as openQuestion: only one concurrent close can win.
+  const result = await prisma.session.updateMany({
+    where: { id: sessionId, openQuestionId: session.openQuestionId },
+    data: { openQuestionId: null, closedQuestionId: question.id },
+  });
+  if (result.count === 0) {
+    throw new QuestionNotOpenError("No Question is currently open for this Session");
+  }
+
+  return toSessionQuestionView(question);
+}
+
+// Advances from the closed Question's Analysis to the next Question in the
+// Set's fixed authoring-time order, opening it the same way openQuestion
+// does. There is no reorder/skip command (see CONTEXT.md).
+export async function nextQuestion(lecturerId: string, sessionId: string): Promise<SessionQuestionView> {
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    include: sessionInclude,
+  });
+  if (!session || session.lecturerId !== lecturerId) {
+    throw new NotFoundError(`No Session ${sessionId} found for this Lecturer`);
+  }
+
+  if (!session.closedQuestionId) {
+    throw new QuestionNotClosedError("Close the currently open Question before advancing");
+  }
+
+  const closedIndex = session.questions.findIndex((q) => q.id === session.closedQuestionId);
+  const next = session.questions[closedIndex + 1];
+  if (!next) {
+    throw new NoNextQuestionError("This Session has no further Questions");
+  }
+
+  // Conditioned on closedQuestionId still matching and openQuestionId still
+  // null, mirroring the same race guard as openQuestion/closeQuestion.
+  const result = await prisma.session.updateMany({
+    where: { id: sessionId, closedQuestionId: session.closedQuestionId, openQuestionId: null },
+    data: { openQuestionId: next.id, closedQuestionId: null },
+  });
+  if (result.count === 0) {
+    throw new QuestionNotClosedError("Close the currently open Question before advancing");
+  }
+
+  return toSessionQuestionView(next);
 }

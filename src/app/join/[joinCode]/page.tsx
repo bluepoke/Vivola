@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { NotFoundError, getSessionByJoinCode } from "@/lib/sessions/session-service";
 import { getStudentInSession } from "@/lib/students/student-service";
-import { getAnswerForStudent } from "@/lib/answers/answer-service";
+import { getAnswerForStudent, getQuestionAnalysis } from "@/lib/answers/answer-service";
+import { getLeaderboard } from "@/lib/leaderboard/leaderboard-service";
 import { getJoinedStudent } from "@/lib/auth/student-session";
 import { JoinForm } from "@/app/join/_components/join-form";
 import { QuestionStage } from "@/app/join/_components/question-stage";
@@ -29,10 +30,15 @@ export default async function JoinPage({
       ? await getStudentInSession(session.id, joined.studentId)
       : null;
 
+  const relevantQuestionId = session.openQuestion?.id ?? session.closedQuestion?.id ?? null;
   const answeredOptionId =
-    student && session.openQuestion
-      ? (await getAnswerForStudent(session.openQuestion.id, student.id))?.answerOptionId ?? null
+    student && relevantQuestionId
+      ? (await getAnswerForStudent(relevantQuestionId, student.id))?.answerOptionId ?? null
       : null;
+
+  const closedAnalysis = session.closedQuestion ? await getQuestionAnalysis(session.closedQuestion) : null;
+  const leaderboard =
+    session.closedQuestion && session.type === "QUESTION" ? await getLeaderboard(session.id) : null;
 
   return (
     <main>
@@ -42,8 +48,11 @@ export default async function JoinPage({
       {student ? (
         <QuestionStage
           sessionId={session.id}
+          sessionType={session.type}
           initialQuestion={session.openQuestion}
           answeredOptionId={answeredOptionId}
+          initialClosedAnalysis={closedAnalysis}
+          initialLeaderboard={leaderboard}
           lobby={
             <section aria-label="Lobby">
               {student.nickname && (

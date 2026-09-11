@@ -95,3 +95,39 @@ export async function getAnswerForStudent(
 export async function getAnswerCount(sessionQuestionId: string): Promise<number> {
   return prisma.answer.count({ where: { sessionQuestionId } });
 }
+
+export type AnalysisOptionView = { id: string; text: string; count: number; isCorrect: boolean };
+export type QuestionAnalysisView = {
+  id: string;
+  prompt: string;
+  options: AnalysisOptionView[];
+  totalAnswered: number;
+};
+
+// Builds the per-Question Analysis: the answer distribution, and (for a
+// Question Set) the correct answer. Takes the closed Question's structural
+// shape (as returned by session-service's closeQuestion) rather than
+// re-fetching it, since counting Answers is this module's own concern.
+// A Student who submitted no Answer is naturally excluded — they have no
+// Answer row to count (see CONTEXT.md's Answer definition).
+export async function getQuestionAnalysis(question: {
+  id: string;
+  prompt: string;
+  options: { id: string; text: string; isCorrect: boolean }[];
+}): Promise<QuestionAnalysisView> {
+  const answers = await prisma.answer.findMany({ where: { sessionQuestionId: question.id } });
+
+  const countByOption = new Map<string, number>();
+  for (const answer of answers) {
+    countByOption.set(answer.answerOptionId, (countByOption.get(answer.answerOptionId) ?? 0) + 1);
+  }
+
+  const options = question.options.map((option) => ({
+    id: option.id,
+    text: option.text,
+    isCorrect: option.isCorrect,
+    count: countByOption.get(option.id) ?? 0,
+  }));
+
+  return { id: question.id, prompt: question.prompt, options, totalAnswered: answers.length };
+}

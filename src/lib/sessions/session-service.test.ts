@@ -5,19 +5,39 @@ import { signUp } from "@/lib/auth/lecturer-auth";
 import { addQuestion, createSet, updateQuestion } from "@/lib/sets/set-service";
 import {
   AlreadyActiveSessionError,
+  NoNextQuestionError,
   OutOfOrderQuestionError,
   QuestionAlreadyOpenError,
+  QuestionNotClosedError,
+  QuestionNotOpenError,
   cancelSession,
+  closeQuestion,
   getActiveSessionForLecturer,
   getPublicSession,
   getSession,
   getSessionByJoinCode,
+  nextQuestion,
   openQuestion,
   startSession,
 } from "@/lib/sessions/session-service";
+import { NoOpenQuestionError, submitAnswer } from "@/lib/answers/answer-service";
+import { joinSessionByJoinCode } from "@/lib/students/student-service";
 
 async function makeLecturer(email: string) {
   return signUp({ email, password: "correct-horse-battery-staple" });
+}
+
+async function makeQuizSessionWithQuestions(lecturerId: string) {
+  const set = await createSet(lecturerId, { type: "QUESTION", title: "Week 3 quiz" });
+  await addQuestion(lecturerId, set.id, {
+    prompt: "What is 2 + 2?",
+    options: [{ text: "3" }, { text: "4", isCorrect: true }],
+  });
+  await addQuestion(lecturerId, set.id, {
+    prompt: "What is 3 + 3?",
+    options: [{ text: "6", isCorrect: true }, { text: "7" }],
+  });
+  return startSession(lecturerId, { setId: set.id, displayMode: "SPLIT" });
 }
 
 beforeEach(async () => {
@@ -250,19 +270,6 @@ describe("getPublicSession", () => {
 });
 
 describe("openQuestion", () => {
-  async function makeQuizSessionWithQuestions(lecturerId: string) {
-    const set = await createSet(lecturerId, { type: "QUESTION", title: "Week 3 quiz" });
-    await addQuestion(lecturerId, set.id, {
-      prompt: "What is 2 + 2?",
-      options: [{ text: "3" }, { text: "4", isCorrect: true }],
-    });
-    await addQuestion(lecturerId, set.id, {
-      prompt: "What is 3 + 3?",
-      options: [{ text: "6", isCorrect: true }, { text: "7" }],
-    });
-    return startSession(lecturerId, { setId: set.id, displayMode: "SPLIT" });
-  }
-
   it("opens the Session's first Question, returning its prompt and options", async () => {
     const lecturer = await makeLecturer("ada@example.com");
     const session = await makeQuizSessionWithQuestions(lecturer.id);
@@ -347,5 +354,163 @@ describe("openQuestion", () => {
     await expect(
       openQuestion(ada.id, gracesSession.id, firstQuestion.id)
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("rejects re-opening the first Question once it has been closed", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    const firstQuestion = session.questions[0]!;
+    await openQuestion(lecturer.id, session.id, firstQuestion.id);
+    await closeQuestion(lecturer.id, session.id);
+
+    await expect(
+      openQuestion(lecturer.id, session.id, firstQuestion.id)
+    ).rejects.toBeInstanceOf(OutOfOrderQuestionError);
+  });
+});
+
+describe("closeQuestion", () => {
+  it("closes the currently open Question and returns it, correct answers revealed", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    const firstQuestion = session.questions[0]!;
+    await openQuestion(lecturer.id, session.id, firstQuestion.id);
+
+    const closed = await closeQuestion(lecturer.id, session.id);
+
+    expect(closed.id).toBe(firstQuestion.id);
+    expect(closed.options.map((o) => [o.text, o.isCorrect])).toEqual([
+      ["3", false],
+      ["4", true],
+    ]);
+  });
+
+  it("stops accepting further Answers for the closed Question", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    const firstQuestion = session.questions[0]!;
+    const student = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
+    await openQuestion(lecturer.id, session.id, firstQuestion.id);
+    await closeQuestion(lecturer.id, session.id);
+
+    await expect(
+      submitAnswer(session.id, student.id, { answerOptionId: firstQuestion.options[0]!.id })
+    ).rejects.toBeInstanceOf(NoOpenQuestionError);
+  });
+
+  it("clears the Session's open Question and reflects the closed Question instead", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    const firstQuestion = session.questions[0]!;
+    await openQuestion(lecturer.id, session.id, firstQuestion.id);
+
+    await closeQuestion(lecturer.id, session.id);
+
+    const reloaded = await getSession(lecturer.id, session.id);
+    expect(reloaded.openQuestion).toBeNull();
+    expect(reloaded.closedQuestion?.id).toBe(firstQuestion.id);
+
+    const publicView = await getPublicSession(session.id);
+    expect(publicView.openQuestion).toBeNull();
+    expect(publicView.closedQuestion?.id).toBe(firstQuestion.id);
+    expect(publicView.closedQuestion?.options.map((o) => [o.text, o.isCorrect])).toEqual([
+      ["3", false],
+      ["4", true],
+    ]);
+  });
+
+  it("throws QuestionNotOpenError when no Question is currently open", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+
+    await expect(closeQuestion(lecturer.id, session.id)).rejects.toBeInstanceOf(QuestionNotOpenError);
+  });
+
+  it("throws QuestionNotOpenError when the open Question has already been closed", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    await openQuestion(lecturer.id, session.id, session.questions[0]!.id);
+    await closeQuestion(lecturer.id, session.id);
+
+    await expect(closeQuestion(lecturer.id, session.id)).rejects.toBeInstanceOf(QuestionNotOpenError);
+  });
+
+  it("throws NotFoundError for a Session owned by a different Lecturer", async () => {
+    const ada = await makeLecturer("ada@example.com");
+    const grace = await makeLecturer("grace@example.com");
+    const gracesSession = await makeQuizSessionWithQuestions(grace.id);
+    await openQuestion(grace.id, gracesSession.id, gracesSession.questions[0]!.id);
+
+    await expect(closeQuestion(ada.id, gracesSession.id)).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe("nextQuestion", () => {
+  it("opens the next Question in fixed order after the closed one", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    const [firstQuestion, secondQuestion] = session.questions;
+    await openQuestion(lecturer.id, session.id, firstQuestion!.id);
+    await closeQuestion(lecturer.id, session.id);
+
+    const opened = await nextQuestion(lecturer.id, session.id);
+
+    expect(opened.id).toBe(secondQuestion!.id);
+    expect(opened.prompt).toBe("What is 3 + 3?");
+
+    const reloaded = await getSession(lecturer.id, session.id);
+    expect(reloaded.openQuestion?.id).toBe(secondQuestion!.id);
+    expect(reloaded.closedQuestion).toBeNull();
+  });
+
+  it("repeats the open/answer/close/Analysis cycle for the newly opened Question", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    const [firstQuestion, secondQuestion] = session.questions;
+    const student = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
+    await openQuestion(lecturer.id, session.id, firstQuestion!.id);
+    await closeQuestion(lecturer.id, session.id);
+    await nextQuestion(lecturer.id, session.id);
+
+    await submitAnswer(session.id, student.id, { answerOptionId: secondQuestion!.options[0]!.id });
+    const closed = await closeQuestion(lecturer.id, session.id);
+
+    expect(closed.id).toBe(secondQuestion!.id);
+  });
+
+  it("throws QuestionNotClosedError when a Question is still open", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    await openQuestion(lecturer.id, session.id, session.questions[0]!.id);
+
+    await expect(nextQuestion(lecturer.id, session.id)).rejects.toBeInstanceOf(QuestionNotClosedError);
+  });
+
+  it("throws QuestionNotClosedError before any Question has ever been opened", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+
+    await expect(nextQuestion(lecturer.id, session.id)).rejects.toBeInstanceOf(QuestionNotClosedError);
+  });
+
+  it("throws NoNextQuestionError once the Session's last Question has closed", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithQuestions(lecturer.id);
+    await openQuestion(lecturer.id, session.id, session.questions[0]!.id);
+    await closeQuestion(lecturer.id, session.id);
+    await nextQuestion(lecturer.id, session.id);
+    await closeQuestion(lecturer.id, session.id);
+
+    await expect(nextQuestion(lecturer.id, session.id)).rejects.toBeInstanceOf(NoNextQuestionError);
+  });
+
+  it("throws NotFoundError for a Session owned by a different Lecturer", async () => {
+    const ada = await makeLecturer("ada@example.com");
+    const grace = await makeLecturer("grace@example.com");
+    const gracesSession = await makeQuizSessionWithQuestions(grace.id);
+    await openQuestion(grace.id, gracesSession.id, gracesSession.questions[0]!.id);
+    await closeQuestion(grace.id, gracesSession.id);
+
+    await expect(nextQuestion(ada.id, gracesSession.id)).rejects.toBeInstanceOf(NotFoundError);
   });
 });

@@ -90,6 +90,11 @@ model Session {
   openQuestionId        String?
   firstQuestionOpenedAt DateTime?
 
+  // The SessionQuestion whose Analysis is currently being displayed: set by
+  // closeQuestion (moving it off openQuestionId) and cleared by nextQuestion
+  // once the Lecturer advances. Never set at the same time as openQuestionId.
+  closedQuestionId String?
+
   @@index([lecturerId])
 }
 

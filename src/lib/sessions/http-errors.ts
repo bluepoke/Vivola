@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import {
   AlreadyActiveSessionError,
+  NoNextQuestionError,
   NotFoundError,
   OutOfOrderQuestionError,
   QuestionAlreadyOpenError,
+  QuestionNotClosedError,
+  QuestionNotOpenError,
 } from "@/lib/sessions/session-service";
 
 export function sessionServiceErrorResponse(error: unknown): NextResponse | null {
@@ -13,7 +16,13 @@ export function sessionServiceErrorResponse(error: unknown): NextResponse | null
   if (error instanceof AlreadyActiveSessionError) {
     return NextResponse.json({ error: error.message }, { status: 409 });
   }
-  if (error instanceof QuestionAlreadyOpenError || error instanceof OutOfOrderQuestionError) {
+  if (
+    error instanceof QuestionAlreadyOpenError ||
+    error instanceof OutOfOrderQuestionError ||
+    error instanceof QuestionNotOpenError ||
+    error instanceof QuestionNotClosedError ||
+    error instanceof NoNextQuestionError
+  ) {
     return NextResponse.json({ error: error.message }, { status: 409 });
   }
   return null;

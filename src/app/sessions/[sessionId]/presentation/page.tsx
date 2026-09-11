@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { NotFoundError, getPublicSession } from "@/lib/sessions/session-service";
-import { getAnswerCount } from "@/lib/answers/answer-service";
+import { getAnswerCount, getQuestionAnalysis } from "@/lib/answers/answer-service";
 import { getStudentCount } from "@/lib/students/student-service";
+import { getLeaderboard } from "@/lib/leaderboard/leaderboard-service";
 import { JoinInfo } from "@/app/sessions/_components/join-info";
 import { SessionStage } from "@/app/sessions/_components/session-stage";
 
@@ -22,10 +23,13 @@ export default async function PresentationPage({
     throw error;
   }
 
-  const [answeredCount, totalStudents] = await Promise.all([
+  const [answeredCount, totalStudents, analysis] = await Promise.all([
     session.openQuestion ? getAnswerCount(session.openQuestion.id) : Promise.resolve(0),
     getStudentCount(session.id),
+    session.closedQuestion ? getQuestionAnalysis(session.closedQuestion) : Promise.resolve(null),
   ]);
+  const leaderboard =
+    session.closedQuestion && session.type === "QUESTION" ? await getLeaderboard(session.id) : null;
 
   return (
     <main>
@@ -33,9 +37,12 @@ export default async function PresentationPage({
       <p>{session.type === "SURVEY" ? "Survey Session" : "Quiz Session"}</p>
       <SessionStage
         sessionId={session.id}
+        sessionType={session.type}
         initialQuestion={session.openQuestion}
         initialAnsweredCount={answeredCount}
         initialTotalStudents={totalStudents}
+        initialAnalysis={analysis}
+        initialLeaderboard={leaderboard}
         lobby={<JoinInfo sessionId={session.id} joinCode={session.joinCode} />}
       />
     </main>

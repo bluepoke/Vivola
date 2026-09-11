@@ -2,20 +2,40 @@
 
 import { useState } from "react";
 import type { PublicQuestionView } from "@/lib/sessions/session-service";
+import type { QuestionAnalysisView } from "@/lib/answers/answer-service";
+import type { LeaderboardEntryView } from "@/lib/leaderboard/leaderboard-service";
+import { QuestionAnalysis } from "@/app/_components/question-analysis";
 
 export function AnswerForm({
   sessionId,
   question,
   initialAnsweredOptionId,
+  showCorrectAnswer = false,
+  closedAnalysis = null,
+  leaderboard = null,
 }: {
   sessionId: string;
   question: PublicQuestionView;
   initialAnsweredOptionId: string | null;
+  showCorrectAnswer?: boolean;
+  closedAnalysis?: QuestionAnalysisView | null;
+  leaderboard?: LeaderboardEntryView[] | null;
 }) {
   const [answeredOptionId, setAnsweredOptionId] = useState(initialAnsweredOptionId);
   const [selectedOptionId, setSelectedOptionId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  if (closedAnalysis) {
+    return (
+      <QuestionAnalysis
+        analysis={closedAnalysis}
+        showCorrectAnswer={showCorrectAnswer}
+        ownAnswerOptionId={answeredOptionId}
+        leaderboard={leaderboard}
+      />
+    );
+  }
 
   if (answeredOptionId) {
     const chosen = question.options.find((option) => option.id === answeredOptionId);
