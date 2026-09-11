@@ -9,6 +9,7 @@ import {
   AlreadyAnsweredError,
   InvalidAnswerOptionError,
   NoOpenQuestionError,
+  getAnswerCount,
   getAnswerForStudent,
   submitAnswer,
 } from "@/lib/answers/answer-service";
@@ -130,5 +131,24 @@ describe("getAnswerForStudent", () => {
     await openQuestion(lecturer.id, session.id, question.id);
 
     await expect(getAnswerForStudent(question.id, student.id)).resolves.toBeNull();
+  });
+});
+
+describe("getAnswerCount", () => {
+  it("counts only the Answers submitted for the given Question", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithTwoQuestions(lecturer.id);
+    const [firstQuestion, secondQuestion] = session.questions;
+    const ada = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
+    const grace = await joinSessionByJoinCode(session.joinCode, { nickname: "Grace" });
+    await openQuestion(lecturer.id, session.id, firstQuestion!.id);
+    await submitAnswer(session.id, ada.id, { answerOptionId: firstQuestion!.options[0]!.id });
+
+    await expect(getAnswerCount(firstQuestion!.id)).resolves.toBe(1);
+    await expect(getAnswerCount(secondQuestion!.id)).resolves.toBe(0);
+
+    await submitAnswer(session.id, grace.id, { answerOptionId: firstQuestion!.options[1]!.id });
+
+    await expect(getAnswerCount(firstQuestion!.id)).resolves.toBe(2);
   });
 });

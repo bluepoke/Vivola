@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { submitAnswer } from "@/lib/answers/answer-service";
+import { getAnswerCount, submitAnswer } from "@/lib/answers/answer-service";
 import { answerServiceErrorResponse } from "@/lib/answers/http-errors";
 import { getJoinedStudent } from "@/lib/auth/student-session";
+import { getSessionSocketServer, sessionRoom } from "@/lib/realtime/session-socket-server";
 
 export async function POST(
   request: Request,
@@ -22,6 +23,12 @@ export async function POST(
 
   try {
     const answer = await submitAnswer(sessionId, joined.studentId, { answerOptionId });
+
+    const count = await getAnswerCount(answer.sessionQuestionId);
+    getSessionSocketServer()
+      ?.to(sessionRoom(sessionId))
+      .emit("session:answer-count", { sessionQuestionId: answer.sessionQuestionId, count });
+
     return NextResponse.json({ answer });
   } catch (error) {
     const response = answerServiceErrorResponse(error);

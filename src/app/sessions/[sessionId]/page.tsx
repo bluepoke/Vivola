@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireLecturer } from "@/lib/auth/session";
 import { NotFoundError, getSession } from "@/lib/sessions/session-service";
+import { getAnswerCount } from "@/lib/answers/answer-service";
+import { getStudentCount } from "@/lib/students/student-service";
 import { JoinInfo } from "@/app/sessions/_components/join-info";
 import { CancelSessionButton } from "@/app/sessions/_components/cancel-session-button";
 import { OpenQuestionButton } from "@/app/sessions/_components/open-question-button";
@@ -31,6 +33,11 @@ export default async function SessionControlPage({
 
   const presentationUrl = `/sessions/${session.id}/presentation`;
 
+  const [answeredCount, totalStudents] = await Promise.all([
+    session.openQuestion ? getAnswerCount(session.openQuestion.id) : Promise.resolve(0),
+    getStudentCount(session.id),
+  ]);
+
   return (
     <main>
       <h1>{session.title}</h1>
@@ -57,6 +64,8 @@ export default async function SessionControlPage({
                 }
               : null
           }
+          initialAnsweredCount={answeredCount}
+          initialTotalStudents={totalStudents}
           lobby={<JoinInfo sessionId={session.id} joinCode={session.joinCode} />}
         />
       )}

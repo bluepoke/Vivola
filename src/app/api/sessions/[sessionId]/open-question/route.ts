@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { openQuestion } from "@/lib/sessions/session-service";
 import { sessionServiceErrorResponse } from "@/lib/sessions/http-errors";
 import { requireLecturer } from "@/lib/auth/session";
+import { getStudentCount } from "@/lib/students/student-service";
 import { getSessionSocketServer, sessionRoom } from "@/lib/realtime/session-socket-server";
 
 export async function POST(
@@ -23,6 +24,12 @@ export async function POST(
   try {
     const question = await openQuestion(lecturer.id, sessionId, questionId);
 
+    // Joining closes the instant a Question opens, so this is the Session's
+    // final Student count — computed fresh here rather than trusted from
+    // whenever the Presentation view/control page last loaded, which may
+    // have been before Students had finished joining.
+    const totalStudents = await getStudentCount(sessionId);
+
     getSessionSocketServer()
       ?.to(sessionRoom(sessionId))
       .emit("session:question-opened", {
@@ -31,6 +38,7 @@ export async function POST(
           prompt: question.prompt,
           options: question.options.map((option) => ({ id: option.id, text: option.text })),
         },
+        totalStudents,
       });
 
     return NextResponse.json({ question });

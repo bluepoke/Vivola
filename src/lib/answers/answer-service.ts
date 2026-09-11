@@ -91,3 +91,7 @@ export async function getAnswerForStudent(
   });
   return answer ? toAnswerView(answer) : null;
 }
+
+export async function getAnswerCount(sessionQuestionId: string): Promise<number> {
+  return prisma.answer.count({ where: { sessionQuestionId } });
+}
