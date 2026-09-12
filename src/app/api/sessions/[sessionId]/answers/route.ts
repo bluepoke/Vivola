@@ -16,13 +16,19 @@ export async function POST(
   }
 
   const body = await request.json().catch(() => ({}));
-  const answerOptionId = typeof body?.answerOptionId === "string" ? body.answerOptionId : undefined;
-  if (!answerOptionId) {
-    return NextResponse.json({ error: "answerOptionId is required" }, { status: 400 });
+  const answerOptionIds =
+    Array.isArray(body?.answerOptionIds) && body.answerOptionIds.every((id: unknown) => typeof id === "string")
+      ? (body.answerOptionIds as string[])
+      : undefined;
+  if (!answerOptionIds || answerOptionIds.length === 0) {
+    return NextResponse.json(
+      { error: "answerOptionIds is required and must contain at least one id" },
+      { status: 400 }
+    );
   }
 
   try {
-    const answer = await submitAnswer(sessionId, joined.studentId, { answerOptionId });
+    const answer = await submitAnswer(sessionId, joined.studentId, { answerOptionIds });
 
     const count = await getAnswerCount(answer.sessionQuestionId);
     getSessionSocketServer()

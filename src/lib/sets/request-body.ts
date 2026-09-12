@@ -9,15 +9,20 @@ function isAnswerOption(value: unknown): value is { text: string; isCorrect?: bo
   );
 }
 
+function isQuestionType(value: unknown): value is "SINGLE_SELECT" | "MULTI_SELECT" {
+  return value === "SINGLE_SELECT" || value === "MULTI_SELECT";
+}
+
 export async function parseQuestionInput(request: Request): Promise<QuestionInput | null> {
   const body = await request.json().catch(() => null);
   if (
     !body ||
     typeof body.prompt !== "string" ||
+    (body.type !== undefined && !isQuestionType(body.type)) ||
     !Array.isArray(body.options) ||
     !body.options.every(isAnswerOption)
   ) {
     return null;
   }
-  return { prompt: body.prompt, options: body.options };
+  return { prompt: body.prompt, type: body.type, options: body.options };
 }

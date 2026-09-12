@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { SetType } from "@/lib/sets/set-service";
+import type { QuestionType, SetType } from "@/lib/sets/set-service";
 
 type OptionDraft = { text: string; isCorrect: boolean };
-type QuestionDraft = { id: string; prompt: string; options: OptionDraft[] };
+type QuestionDraft = { id: string; prompt: string; type: QuestionType; options: OptionDraft[] };
 
 function blankOptions(): OptionDraft[] {
   return [
@@ -27,6 +27,7 @@ export function QuestionForm({
   onCancel: () => void;
 }) {
   const [prompt, setPrompt] = useState(initialQuestion?.prompt ?? "");
+  const [type, setType_] = useState<QuestionType>(initialQuestion?.type ?? "SINGLE_SELECT");
   const [options, setOptions] = useState<OptionDraft[]>(
     initialQuestion?.options ?? blankOptions()
   );
@@ -39,6 +40,24 @@ export function QuestionForm({
 
   function setCorrectOption(index: number) {
     setOptions((current) => current.map((option, i) => ({ ...option, isCorrect: i === index })));
+  }
+
+  function toggleCorrectOption(index: number) {
+    setOptions((current) =>
+      current.map((option, i) => (i === index ? { ...option, isCorrect: !option.isCorrect } : option))
+    );
+  }
+
+  function changeType(nextType: QuestionType) {
+    setType_(nextType);
+    // Switching to single-select: a radio group can only mark one option
+    // correct, so keep just the first previously-marked one (if any).
+    if (nextType === "SINGLE_SELECT") {
+      setOptions((current) => {
+        const firstCorrectIndex = current.findIndex((option) => option.isCorrect);
+        return current.map((option, i) => ({ ...option, isCorrect: i === firstCorrectIndex }));
+      });
+    }
   }
 
   function addOption() {
@@ -62,7 +81,7 @@ export function QuestionForm({
     const response = await fetch(endpoint, {
       method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, options }),
+      body: JSON.stringify({ prompt, type, options }),
     });
 
     setSubmitting(false);
@@ -89,26 +108,63 @@ export function QuestionForm({
         />
       </div>
 
+      <fieldset style={{ border: "2px solid var(--color-text)", padding: 12, display: "flex", gap: 16 }}>
+        <legend style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}>
+          Selection type
+        </legend>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, margin: 0 }}>
+          <input
+            type="radio"
+            name="question-type"
+            checked={type === "SINGLE_SELECT"}
+            onChange={() => changeType("SINGLE_SELECT")}
+          />
+          Single-select
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, margin: 0 }}>
+          <input
+            type="radio"
+            name="question-type"
+            checked={type === "MULTI_SELECT"}
+            onChange={() => changeType("MULTI_SELECT")}
+          />
+          Multi-select
+        </label>
+      </fieldset>
+
       <fieldset style={{ border: "2px solid var(--color-text)", padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
         <legend style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}>
-          Answer options{setType === "QUESTION" ? " (select the correct one)" : ""}
+          Answer options{setType === "QUESTION" ? " (select the correct one(s))" : ""}
         </legend>
         {options.map((option, index) => (
           <div key={index} style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {setType === "QUESTION" ? (
-              <label
-                className="radio"
-                style={{ margin: 0 }}
-                aria-label={`Mark option ${index + 1} as correct`}
-              >
-                <input
-                  type="radio"
-                  name="correct-option"
-                  checked={option.isCorrect}
-                  onChange={() => setCorrectOption(index)}
-                />
-                <span className="dot" />
-              </label>
+              type === "MULTI_SELECT" ? (
+                <label
+                  style={{ margin: 0 }}
+                  aria-label={`Mark option ${index + 1} as correct`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={option.isCorrect}
+                    onChange={() => toggleCorrectOption(index)}
+                  />
+                </label>
+              ) : (
+                <label
+                  className="radio"
+                  style={{ margin: 0 }}
+                  aria-label={`Mark option ${index + 1} as correct`}
+                >
+                  <input
+                    type="radio"
+                    name="correct-option"
+                    checked={option.isCorrect}
+                    onChange={() => setCorrectOption(index)}
+                  />
+                  <span className="dot" />
+                </label>
+              )
             ) : null}
             <input
               className="input"

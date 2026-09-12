@@ -26,6 +26,7 @@ export async function POST(
         question: {
           id: question.id,
           prompt: question.prompt,
+          type: question.type,
           options: question.options.map((option) => ({ id: option.id, text: option.text })),
         },
         totalStudents,

@@ -9,58 +9,69 @@ import { QuestionAnalysis } from "@/app/_components/question-analysis";
 export function AnswerForm({
   sessionId,
   question,
-  initialAnsweredOptionId,
+  initialAnsweredOptionIds,
   showCorrectAnswer = false,
   closedAnalysis = null,
   leaderboard = null,
 }: {
   sessionId: string;
   question: PublicQuestionView;
-  initialAnsweredOptionId: string | null;
+  initialAnsweredOptionIds: string[] | null;
   showCorrectAnswer?: boolean;
   closedAnalysis?: QuestionAnalysisView | null;
   leaderboard?: LeaderboardEntryView[] | null;
 }) {
-  const [answeredOptionId, setAnsweredOptionId] = useState(initialAnsweredOptionId);
-  const [selectedOptionId, setSelectedOptionId] = useState("");
+  const [answeredOptionIds, setAnsweredOptionIds] = useState(initialAnsweredOptionIds);
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const isMultiSelect = question.type === "MULTI_SELECT";
 
   if (closedAnalysis) {
     return (
       <QuestionAnalysis
         analysis={closedAnalysis}
         showCorrectAnswer={showCorrectAnswer}
-        ownAnswerOptionId={answeredOptionId}
+        ownAnswerOptionIds={answeredOptionIds}
         leaderboard={leaderboard}
       />
     );
   }
 
-  if (answeredOptionId) {
-    const chosen = question.options.find((option) => option.id === answeredOptionId);
+  if (answeredOptionIds) {
+    const chosen = question.options.filter((option) => answeredOptionIds.includes(option.id));
     return (
       <section aria-label="Your Answer" className="card" style={{ textAlign: "center" }}>
         <span className="tag tag-accent" style={{ alignSelf: "center" }}>
           Answer locked in
         </span>
         <h2 style={{ margin: 0 }}>{question.prompt}</h2>
-        <p style={{ margin: 0, fontWeight: 700 }}>{chosen?.text}</p>
+        <p style={{ margin: 0, fontWeight: 700 }}>{chosen.map((option) => option.text).join(", ")}</p>
         <p className="text-muted" style={{ margin: 0 }}>Waiting for other participants&hellip;</p>
       </section>
     );
   }
 
+  function toggleOption(optionId: string) {
+    if (isMultiSelect) {
+      setSelectedOptionIds((current) =>
+        current.includes(optionId) ? current.filter((id) => id !== optionId) : [...current, optionId]
+      );
+    } else {
+      setSelectedOptionIds([optionId]);
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!selectedOptionId) return;
+    if (selectedOptionIds.length === 0) return;
     setSubmitting(true);
     setError(null);
 
     const response = await fetch(`/api/sessions/${sessionId}/answers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answerOptionId: selectedOptionId }),
+      body: JSON.stringify({ answerOptionIds: selectedOptionIds }),
     });
 
     if (!response.ok) {
@@ -70,7 +81,7 @@ export function AnswerForm({
       return;
     }
 
-    setAnsweredOptionId(selectedOptionId);
+    setAnsweredOptionIds(selectedOptionIds);
   }
 
   return (
@@ -78,7 +89,7 @@ export function AnswerForm({
       <h2 style={{ margin: 0 }}>{question.prompt}</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {question.options.map((option) => {
-          const selected = selectedOptionId === option.id;
+          const selected = selectedOptionIds.includes(option.id);
           return (
             <label
               key={option.id}
@@ -96,11 +107,11 @@ export function AnswerForm({
               }}
             >
               <input
-                type="radio"
+                type={isMultiSelect ? "checkbox" : "radio"}
                 name="answerOptionId"
                 value={option.id}
                 checked={selected}
-                onChange={() => setSelectedOptionId(option.id)}
+                onChange={() => toggleOption(option.id)}
                 style={{ accentColor: "var(--color-accent)" }}
               />
               {option.text}
@@ -113,7 +124,11 @@ export function AnswerForm({
           {error}
         </p>
       )}
-      <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !selectedOptionId}>
+      <button
+        type="submit"
+        className="btn btn-primary btn-block"
+        disabled={submitting || selectedOptionIds.length === 0}
+      >
         Submit Answer
       </button>
     </form>

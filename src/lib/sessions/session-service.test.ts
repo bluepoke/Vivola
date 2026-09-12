@@ -408,7 +408,7 @@ describe("closeQuestion", () => {
     await closeQuestion(lecturer.id, session.id);
 
     await expect(
-      submitAnswer(session.id, student.id, { answerOptionId: firstQuestion.options[0]!.id })
+      submitAnswer(session.id, student.id, { answerOptionIds: [firstQuestion.options[0]!.id] })
     ).rejects.toBeInstanceOf(NoOpenQuestionError);
   });
 
@@ -486,7 +486,7 @@ describe("nextQuestion", () => {
     await closeQuestion(lecturer.id, session.id);
     await nextQuestion(lecturer.id, session.id);
 
-    await submitAnswer(session.id, student.id, { answerOptionId: secondQuestion!.options[0]!.id });
+    await submitAnswer(session.id, student.id, { answerOptionIds: [secondQuestion!.options[0]!.id] });
     const closed = await closeQuestion(lecturer.id, session.id);
 
     expect(closed.id).toBe(secondQuestion!.id);

@@ -159,6 +159,62 @@ describe("addQuestion", () => {
     ).rejects.toBeInstanceOf(InvalidInputError);
   });
 
+  it("defaults a question to single-select when no type is given", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "QUESTION", title: "Week 3 quiz" });
+
+    const question = await addQuestion(lecturer.id, set.id, {
+      prompt: "What is 2 + 2?",
+      options: [{ text: "3" }, { text: "4", isCorrect: true }],
+    });
+
+    expect(question.type).toBe("SINGLE_SELECT");
+  });
+
+  it("adds a multi-select Question Set question with more than one correct answer marked", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "QUESTION", title: "Week 3 quiz" });
+
+    const question = await addQuestion(lecturer.id, set.id, {
+      prompt: "Which are even?",
+      type: "MULTI_SELECT",
+      options: [
+        { text: "2", isCorrect: true },
+        { text: "3" },
+        { text: "4", isCorrect: true },
+      ],
+    });
+
+    expect(question.type).toBe("MULTI_SELECT");
+    expect(question.options.filter((o) => o.isCorrect)).toHaveLength(2);
+  });
+
+  it("rejects a multi-select Question Set question with no correct answer marked", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "QUESTION", title: "Week 3 quiz" });
+
+    await expect(
+      addQuestion(lecturer.id, set.id, {
+        prompt: "Which are even?",
+        type: "MULTI_SELECT",
+        options: [{ text: "2" }, { text: "3" }],
+      })
+    ).rejects.toBeInstanceOf(InvalidInputError);
+  });
+
+  it("rejects a multi-select Survey Set question with a correct answer marked", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "SURVEY", title: "Opinions" });
+
+    await expect(
+      addQuestion(lecturer.id, set.id, {
+        prompt: "Which do you enjoy?",
+        type: "MULTI_SELECT",
+        options: [{ text: "A", isCorrect: true }, { text: "B" }],
+      })
+    ).rejects.toBeInstanceOf(InvalidInputError);
+  });
+
   it("rejects a question with fewer than two options", async () => {
     const lecturer = await makeLecturer("ada@example.com");
     const set = await createSet(lecturer.id, { type: "SURVEY", title: "Opinions" });
@@ -220,6 +276,53 @@ describe("updateQuestion", () => {
 
     expect(updated.prompt).toBe("What is 3 + 3?");
     expect(updated.options.map((o) => o.text)).toEqual(["5", "6"]);
+  });
+
+  it("changes a Question from single-select to multi-select", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "QUESTION", title: "Week 3 quiz" });
+    const question = await addQuestion(lecturer.id, set.id, {
+      prompt: "Which are even?",
+      options: [{ text: "2", isCorrect: true }, { text: "3" }],
+    });
+
+    const updated = await updateQuestion(lecturer.id, set.id, question.id, {
+      prompt: "Which are even?",
+      type: "MULTI_SELECT",
+      options: [
+        { text: "2", isCorrect: true },
+        { text: "3" },
+        { text: "4", isCorrect: true },
+      ],
+    });
+
+    expect(updated.type).toBe("MULTI_SELECT");
+    expect(updated.options.filter((o) => o.isCorrect)).toHaveLength(2);
+  });
+
+  it("preserves an existing multi-select Question's type when the update omits it", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const set = await createSet(lecturer.id, { type: "QUESTION", title: "Week 3 quiz" });
+    const question = await addQuestion(lecturer.id, set.id, {
+      prompt: "Which are even?",
+      type: "MULTI_SELECT",
+      options: [
+        { text: "2", isCorrect: true },
+        { text: "3" },
+        { text: "4", isCorrect: true },
+      ],
+    });
+
+    const updated = await updateQuestion(lecturer.id, set.id, question.id, {
+      prompt: "Which are even? (updated)",
+      options: [
+        { text: "2", isCorrect: true },
+        { text: "3" },
+        { text: "4", isCorrect: true },
+      ],
+    });
+
+    expect(updated.type).toBe("MULTI_SELECT");
   });
 
   it("re-validates the correct-answer rule against the Set's type", async () => {

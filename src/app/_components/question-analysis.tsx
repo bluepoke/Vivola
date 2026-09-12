@@ -4,18 +4,19 @@ import { Leaderboard } from "@/app/_components/leaderboard";
 
 // Renders a closed Question's Analysis — the answer distribution, and (for a
 // Question Set) the correct answer — shared between the Presentation view,
-// the Lecturer control view, and each Student's own device. `ownAnswerOptionId`
+// the Lecturer control view, and each Student's own device. `ownAnswerOptionIds`
 // and `showCorrectAnswer` are per-viewer: a Student's device highlights their
-// own Answer and its correctness, while the shared views show neither.
+// own Answer (possibly more than one option, for a multi-select Question)
+// and its correctness, while the shared views show neither.
 export function QuestionAnalysis({
   analysis,
   showCorrectAnswer,
-  ownAnswerOptionId = null,
+  ownAnswerOptionIds = null,
   leaderboard = null,
 }: {
   analysis: QuestionAnalysisView;
   showCorrectAnswer: boolean;
-  ownAnswerOptionId?: string | null;
+  ownAnswerOptionIds?: string[] | null;
   leaderboard?: LeaderboardEntryView[] | null;
 }) {
   return (
@@ -26,7 +27,7 @@ export function QuestionAnalysis({
       <h3 style={{ margin: 0 }}>{analysis.prompt}</h3>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {analysis.options.map((option) => {
-          const isOwnAnswer = option.id === ownAnswerOptionId;
+          const isOwnAnswer = ownAnswerOptionIds?.includes(option.id) ?? false;
           const isCorrect = showCorrectAnswer && option.isCorrect;
           const pct = analysis.totalAnswered === 0 ? 0 : Math.round((option.count / analysis.totalAnswered) * 100);
           return (

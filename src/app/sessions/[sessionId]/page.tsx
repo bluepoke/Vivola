@@ -107,6 +107,7 @@ export default async function SessionControlPage({
                 ? {
                     id: session.openQuestion.id,
                     prompt: session.openQuestion.prompt,
+                    type: session.openQuestion.type,
                     options: session.openQuestion.options.map((option) => ({
                       id: option.id,
                       text: option.text,

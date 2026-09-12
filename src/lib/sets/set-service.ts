@@ -1,15 +1,24 @@
 import { prisma } from "@/lib/db/client";
-import { Prisma, type SetType } from "@prisma/client";
+import { Prisma, type QuestionType, type SetType } from "@prisma/client";
 import { InvalidInputError, NotFoundError } from "@/lib/errors";
 
 export { InvalidInputError, NotFoundError };
-export type { SetType };
+export type { QuestionType, SetType };
 
 export type AnswerOptionInput = { text: string; isCorrect?: boolean };
-export type QuestionInput = { prompt: string; options: AnswerOptionInput[] };
+export type QuestionInput = {
+  prompt: string;
+  type?: QuestionType;
+  options: AnswerOptionInput[];
+};
 
 export type AnswerOptionView = { id: string; text: string; isCorrect: boolean };
-export type QuestionView = { id: string; prompt: string; options: AnswerOptionView[] };
+export type QuestionView = {
+  id: string;
+  prompt: string;
+  type: QuestionType;
+  options: AnswerOptionView[];
+};
 export type SetView = {
   id: string;
   lecturerId: string;
@@ -60,11 +69,13 @@ function isRecordNotFound(error: unknown): boolean {
 function toQuestionView(question: {
   id: string;
   prompt: string;
+  type: QuestionType;
   options: { id: string; text: string; isCorrect: boolean }[];
 }): QuestionView {
   return {
     id: question.id,
     prompt: question.prompt,
+    type: question.type,
     options: question.options.map((option) => ({
       id: option.id,
       text: option.text,
@@ -73,7 +84,7 @@ function toQuestionView(question: {
   };
 }
 
-function validateQuestionInput(setType: SetType, input: QuestionInput): void {
+function validateQuestionInput(setType: SetType, type: QuestionType, input: QuestionInput): void {
   if (!input.prompt.trim()) {
     throw new InvalidInputError("A question's prompt cannot be empty");
   }
@@ -89,9 +100,14 @@ function validateQuestionInput(setType: SetType, input: QuestionInput): void {
   if (setType === "SURVEY" && correctCount > 0) {
     throw new InvalidInputError("Survey Set questions cannot have a correct answer marked");
   }
-  if (setType === "QUESTION" && correctCount !== 1) {
+  if (setType === "QUESTION" && type === "SINGLE_SELECT" && correctCount !== 1) {
     throw new InvalidInputError(
-      "Question Set questions must have exactly one correct answer marked"
+      "Single-select Question Set questions must have exactly one correct answer marked"
+    );
+  }
+  if (setType === "QUESTION" && type === "MULTI_SELECT" && correctCount < 1) {
+    throw new InvalidInputError(
+      "Multi-select Question Set questions must have at least one correct answer marked"
     );
   }
 }
@@ -184,7 +200,8 @@ export async function addQuestion(
   input: QuestionInput
 ): Promise<QuestionView> {
   const set = await findOwnedSet(lecturerId, setId);
-  validateQuestionInput(set.type, input);
+  const type = input.type ?? "SINGLE_SELECT";
+  validateQuestionInput(set.type, type, input);
 
   const question = await runSerializable(async (tx) => {
     const lastQuestion = await tx.question.findFirst({
@@ -197,6 +214,7 @@ export async function addQuestion(
       data: {
         setId,
         prompt: input.prompt.trim(),
+        type,
         order: nextOrder,
         options: {
           create: input.options.map((option, index) => ({
@@ -220,7 +238,8 @@ export async function updateQuestion(
   input: QuestionInput
 ): Promise<QuestionView> {
   const question = await findOwnedQuestion(lecturerId, setId, questionId);
-  validateQuestionInput(question.set.type, input);
+  const type = input.type ?? question.type;
+  validateQuestionInput(question.set.type, type, input);
 
   try {
     const updated = await prisma.$transaction(async (tx) => {
@@ -229,6 +248,7 @@ export async function updateQuestion(
         where: { id: questionId },
         data: {
           prompt: input.prompt.trim(),
+          type,
           options: {
             create: input.options.map((option, index) => ({
               text: option.text.trim(),

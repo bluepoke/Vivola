@@ -18,7 +18,7 @@ export async function POST(
   const input = await parseQuestionInput(request);
   if (!input) {
     return NextResponse.json(
-      { error: "prompt and an array of options ({ text, isCorrect? }) are required" },
+      { error: "prompt and an array of options ({ text, isCorrect? }) are required; type, if present, must be SINGLE_SELECT or MULTI_SELECT" },
       { status: 400 }
     );
   }

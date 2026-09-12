@@ -19,7 +19,7 @@ export function QuestionStage({
   sessionId,
   sessionType,
   initialQuestion,
-  answeredOptionId,
+  answeredOptionIds,
   initialClosedAnalysis,
   initialLeaderboard,
   initialEnded,
@@ -28,14 +28,14 @@ export function QuestionStage({
   sessionId: string;
   sessionType: SetType;
   initialQuestion: PublicQuestionView | null;
-  answeredOptionId: string | null;
+  answeredOptionIds: string[] | null;
   initialClosedAnalysis: QuestionAnalysisView | null;
   initialLeaderboard: LeaderboardEntryView[] | null;
   initialEnded: boolean;
   lobby: ReactNode;
 }) {
   const [question, setQuestion] = useState(initialQuestion);
-  const [ownAnswerOptionId, setOwnAnswerOptionId] = useState(answeredOptionId);
+  const [ownAnswerOptionIds, setOwnAnswerOptionIds] = useState(answeredOptionIds);
   const [closedAnalysis, setClosedAnalysis] = useState(initialClosedAnalysis);
   const [leaderboard, setLeaderboard] = useState(initialLeaderboard);
   const [ended, setEnded] = useState(initialEnded);
@@ -45,7 +45,7 @@ export function QuestionStage({
     socket.emit("session:join-room", sessionId);
     socket.on("session:question-opened", (payload: { question: PublicQuestionView }) => {
       setQuestion(payload.question);
-      setOwnAnswerOptionId(null);
+      setOwnAnswerOptionIds(null);
       setClosedAnalysis(null);
       setLeaderboard(null);
     });
@@ -79,8 +79,15 @@ export function QuestionStage({
     <AnswerForm
       key={effectiveQuestion.id}
       sessionId={sessionId}
-      question={question ?? { id: closedAnalysis!.id, prompt: closedAnalysis!.prompt, options: closedAnalysis!.options }}
-      initialAnsweredOptionId={ownAnswerOptionId}
+      question={
+        question ?? {
+          id: closedAnalysis!.id,
+          prompt: closedAnalysis!.prompt,
+          type: closedAnalysis!.type,
+          options: closedAnalysis!.options,
+        }
+      }
+      initialAnsweredOptionIds={ownAnswerOptionIds}
       showCorrectAnswer={sessionType === "QUESTION"}
       closedAnalysis={closedAnalysis}
       leaderboard={leaderboard}

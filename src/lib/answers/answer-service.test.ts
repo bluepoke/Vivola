@@ -33,6 +33,20 @@ async function makeQuizSessionWithTwoQuestions(lecturerId: string) {
   return startSession(lecturerId, { setId: set.id, displayMode: "SPLIT" });
 }
 
+async function makeQuizSessionWithMultiSelectQuestion(lecturerId: string) {
+  const set = await createSet(lecturerId, { type: "QUESTION", title: "Week 3 quiz" });
+  await addQuestion(lecturerId, set.id, {
+    prompt: "Which are even?",
+    type: "MULTI_SELECT",
+    options: [
+      { text: "2", isCorrect: true },
+      { text: "3" },
+      { text: "4", isCorrect: true },
+    ],
+  });
+  return startSession(lecturerId, { setId: set.id, displayMode: "SPLIT" });
+}
+
 beforeEach(async () => {
   await prisma.lecturer.deleteMany();
 });
@@ -45,13 +59,11 @@ describe("submitAnswer", () => {
     const student = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
     await openQuestion(lecturer.id, session.id, question.id);
 
-    const answer = await submitAnswer(session.id, student.id, {
-      answerOptionId: question.options[1]!.id,
-    });
+    const answer = await submitAnswer(session.id, student.id, { answerOptionIds: [question.options[1]!.id,] });
 
     expect(answer.sessionQuestionId).toBe(question.id);
     expect(answer.studentId).toBe(student.id);
-    expect(answer.answerOptionId).toBe(question.options[1]!.id);
+    expect(answer.answerOptionIds).toEqual([question.options[1]!.id]);
   });
 
   it("rejects a second Answer from the same Student to the same Question", async () => {
@@ -60,10 +72,10 @@ describe("submitAnswer", () => {
     const question = session.questions[0]!;
     const student = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
     await openQuestion(lecturer.id, session.id, question.id);
-    await submitAnswer(session.id, student.id, { answerOptionId: question.options[0]!.id });
+    await submitAnswer(session.id, student.id, { answerOptionIds: [question.options[0]!.id] });
 
     await expect(
-      submitAnswer(session.id, student.id, { answerOptionId: question.options[1]!.id })
+      submitAnswer(session.id, student.id, { answerOptionIds: [question.options[1]!.id] })
     ).rejects.toBeInstanceOf(AlreadyAnsweredError);
   });
 
@@ -73,7 +85,7 @@ describe("submitAnswer", () => {
     const student = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
 
     await expect(
-      submitAnswer(session.id, student.id, { answerOptionId: session.questions[0]!.options[0]!.id })
+      submitAnswer(session.id, student.id, { answerOptionIds: [session.questions[0]!.options[0]!.id] })
     ).rejects.toBeInstanceOf(NoOpenQuestionError);
   });
 
@@ -85,7 +97,7 @@ describe("submitAnswer", () => {
     await openQuestion(lecturer.id, session.id, firstQuestion!.id);
 
     await expect(
-      submitAnswer(session.id, student.id, { answerOptionId: secondQuestion!.options[0]!.id })
+      submitAnswer(session.id, student.id, { answerOptionIds: [secondQuestion!.options[0]!.id] })
     ).rejects.toBeInstanceOf(InvalidAnswerOptionError);
   });
 
@@ -98,9 +110,7 @@ describe("submitAnswer", () => {
     const studentOfOtherSession = await joinSessionByJoinCode(otherSession.joinCode, { nickname: "Grace" });
 
     await expect(
-      submitAnswer(session.id, studentOfOtherSession.id, {
-        answerOptionId: session.questions[0]!.options[0]!.id,
-      })
+      submitAnswer(session.id, studentOfOtherSession.id, { answerOptionIds: [session.questions[0]!.options[0]!.id,] })
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -113,7 +123,7 @@ describe("submitAnswer", () => {
     await endSession(lecturer.id, session.id);
 
     await expect(
-      submitAnswer(session.id, student.id, { answerOptionId: question.options[0]!.id })
+      submitAnswer(session.id, student.id, { answerOptionIds: [question.options[0]!.id] })
     ).rejects.toBeInstanceOf(SessionEndedError);
   });
 
@@ -125,15 +135,53 @@ describe("submitAnswer", () => {
     const grace = await joinSessionByJoinCode(session.joinCode, { nickname: "Grace" });
     await openQuestion(lecturer.id, session.id, question.id);
 
-    await submitAnswer(session.id, ada.id, { answerOptionId: question.options[0]!.id });
-    await submitAnswer(session.id, grace.id, { answerOptionId: question.options[1]!.id });
+    await submitAnswer(session.id, ada.id, { answerOptionIds: [question.options[0]!.id] });
+    await submitAnswer(session.id, grace.id, { answerOptionIds: [question.options[1]!.id] });
 
-    await expect(getAnswerForStudent(question.id, ada.id)).resolves.toMatchObject({
-      answerOptionId: question.options[0]!.id,
+    await expect(getAnswerForStudent(question.id, ada.id)).resolves.toMatchObject({ answerOptionIds: [question.options[0]!.id,] });
+    await expect(getAnswerForStudent(question.id, grace.id)).resolves.toMatchObject({ answerOptionIds: [question.options[1]!.id,] });
+  });
+
+  it("records a Student's multiple selected options for a multi-select Question", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithMultiSelectQuestion(lecturer.id);
+    const question = session.questions[0]!;
+    const student = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
+    await openQuestion(lecturer.id, session.id, question.id);
+
+    const answer = await submitAnswer(session.id, student.id, {
+      answerOptionIds: [question.options[0]!.id, question.options[2]!.id],
     });
-    await expect(getAnswerForStudent(question.id, grace.id)).resolves.toMatchObject({
-      answerOptionId: question.options[1]!.id,
-    });
+
+    expect(new Set(answer.answerOptionIds)).toEqual(
+      new Set([question.options[0]!.id, question.options[2]!.id])
+    );
+  });
+
+  it("rejects more than one selected option for a single-select Question", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithTwoQuestions(lecturer.id);
+    const question = session.questions[0]!;
+    const student = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
+    await openQuestion(lecturer.id, session.id, question.id);
+
+    await expect(
+      submitAnswer(session.id, student.id, {
+        answerOptionIds: [question.options[0]!.id, question.options[1]!.id],
+      })
+    ).rejects.toBeInstanceOf(InvalidAnswerOptionError);
+  });
+
+  it("rejects an empty selection", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithTwoQuestions(lecturer.id);
+    const question = session.questions[0]!;
+    const student = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
+    await openQuestion(lecturer.id, session.id, question.id);
+
+    await expect(
+      submitAnswer(session.id, student.id, { answerOptionIds: [] })
+    ).rejects.toBeInstanceOf(InvalidAnswerOptionError);
   });
 });
 
@@ -157,12 +205,12 @@ describe("getAnswerCount", () => {
     const ada = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
     const grace = await joinSessionByJoinCode(session.joinCode, { nickname: "Grace" });
     await openQuestion(lecturer.id, session.id, firstQuestion!.id);
-    await submitAnswer(session.id, ada.id, { answerOptionId: firstQuestion!.options[0]!.id });
+    await submitAnswer(session.id, ada.id, { answerOptionIds: [firstQuestion!.options[0]!.id] });
 
     await expect(getAnswerCount(firstQuestion!.id)).resolves.toBe(1);
     await expect(getAnswerCount(secondQuestion!.id)).resolves.toBe(0);
 
-    await submitAnswer(session.id, grace.id, { answerOptionId: firstQuestion!.options[1]!.id });
+    await submitAnswer(session.id, grace.id, { answerOptionIds: [firstQuestion!.options[1]!.id] });
 
     await expect(getAnswerCount(firstQuestion!.id)).resolves.toBe(2);
   });
@@ -177,9 +225,9 @@ describe("getQuestionAnalysis", () => {
     const grace = await joinSessionByJoinCode(session.joinCode, { nickname: "Grace" });
     const ida = await joinSessionByJoinCode(session.joinCode, { nickname: "Ida" });
     await openQuestion(lecturer.id, session.id, question.id);
-    await submitAnswer(session.id, ada.id, { answerOptionId: question.options[0]!.id });
-    await submitAnswer(session.id, grace.id, { answerOptionId: question.options[1]!.id });
-    await submitAnswer(session.id, ida.id, { answerOptionId: question.options[1]!.id });
+    await submitAnswer(session.id, ada.id, { answerOptionIds: [question.options[0]!.id] });
+    await submitAnswer(session.id, grace.id, { answerOptionIds: [question.options[1]!.id] });
+    await submitAnswer(session.id, ida.id, { answerOptionIds: [question.options[1]!.id] });
     const closed = await closeQuestion(lecturer.id, session.id);
 
     const analysis = await getQuestionAnalysis(closed);
@@ -198,12 +246,35 @@ describe("getQuestionAnalysis", () => {
     const ada = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
     await joinSessionByJoinCode(session.joinCode, { nickname: "Grace" });
     await openQuestion(lecturer.id, session.id, question.id);
-    await submitAnswer(session.id, ada.id, { answerOptionId: question.options[0]!.id });
+    await submitAnswer(session.id, ada.id, { answerOptionIds: [question.options[0]!.id] });
     const closed = await closeQuestion(lecturer.id, session.id);
 
     const analysis = await getQuestionAnalysis(closed);
 
     expect(analysis.totalAnswered).toBe(1);
     expect(analysis.options.map((o) => o.count)).toEqual([1, 0]);
+  });
+
+  it("counts a multi-select Student's Answer toward each option they selected", async () => {
+    const lecturer = await makeLecturer("ada@example.com");
+    const session = await makeQuizSessionWithMultiSelectQuestion(lecturer.id);
+    const question = session.questions[0]!;
+    const ada = await joinSessionByJoinCode(session.joinCode, { nickname: "Ada" });
+    const grace = await joinSessionByJoinCode(session.joinCode, { nickname: "Grace" });
+    await openQuestion(lecturer.id, session.id, question.id);
+    await submitAnswer(session.id, ada.id, {
+      answerOptionIds: [question.options[0]!.id, question.options[2]!.id],
+    });
+    await submitAnswer(session.id, grace.id, { answerOptionIds: [question.options[0]!.id] });
+    const closed = await closeQuestion(lecturer.id, session.id);
+
+    const analysis = await getQuestionAnalysis(closed);
+
+    expect(analysis.totalAnswered).toBe(2);
+    expect(analysis.options.map((o) => [o.text, o.count])).toEqual([
+      ["2", 2],
+      ["3", 0],
+      ["4", 1],
+    ]);
   });
 });

@@ -34,9 +34,9 @@ export default async function JoinPage({
       : null;
 
   const relevantQuestionId = session.openQuestion?.id ?? session.closedQuestion?.id ?? null;
-  const answeredOptionId =
+  const answeredOptionIds =
     student && relevantQuestionId
-      ? (await getAnswerForStudent(relevantQuestionId, student.id))?.answerOptionId ?? null
+      ? (await getAnswerForStudent(relevantQuestionId, student.id))?.answerOptionIds ?? null
       : null;
 
   const closedAnalysis = session.closedQuestion ? await getQuestionAnalysis(session.closedQuestion) : null;
@@ -61,7 +61,7 @@ export default async function JoinPage({
             sessionId={session.id}
             sessionType={session.type}
             initialQuestion={session.openQuestion}
-            answeredOptionId={answeredOptionId}
+            answeredOptionIds={answeredOptionIds}
             initialClosedAnalysis={closedAnalysis}
             initialLeaderboard={leaderboard}
             initialEnded={session.ended}

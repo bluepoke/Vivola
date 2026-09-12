@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/client";
-import { Prisma } from "@prisma/client";
+import { Prisma, type QuestionType } from "@prisma/client";
 import { NotFoundError, SessionEndedError } from "@/lib/errors";
 
 export { NotFoundError, SessionEndedError };
@@ -11,20 +11,20 @@ export type AnswerView = {
   id: string;
   sessionQuestionId: string;
   studentId: string;
-  answerOptionId: string;
+  answerOptionIds: string[];
 };
 
 function toAnswerView(answer: {
   id: string;
   sessionQuestionId: string;
   studentId: string;
-  answerOptionId: string;
+  selections: { answerOptionId: string }[];
 }): AnswerView {
   return {
     id: answer.id,
     sessionQuestionId: answer.sessionQuestionId,
     studentId: answer.studentId,
-    answerOptionId: answer.answerOptionId,
+    answerOptionIds: answer.selections.map((selection) => selection.answerOptionId),
   };
 }
 
@@ -33,10 +33,13 @@ function toAnswerView(answer: {
 // "at most one Answer per Student per Question" even under a race between
 // two concurrent submissions; there is no update path by design (see
 // CONTEXT.md's Answer definition — an Answer cannot be changed once submitted).
+// A single-select Question requires exactly one answerOptionId; a
+// multi-select Question accepts one or more, each becoming its own
+// AnswerSelection row (see ticket #10 / the multi-select data model).
 export async function submitAnswer(
   sessionId: string,
   studentId: string,
-  input: { answerOptionId: string }
+  input: { answerOptionIds: string[] }
 ): Promise<AnswerView> {
   const student = await prisma.student.findUnique({ where: { id: studentId } });
   if (!student || student.sessionId !== sessionId) {
@@ -54,10 +57,23 @@ export async function submitAnswer(
     throw new NoOpenQuestionError("No Question is currently open for this Session");
   }
 
-  const option = await prisma.sessionAnswerOption.findUnique({
-    where: { id: input.answerOptionId },
+  const uniqueOptionIds = Array.from(new Set(input.answerOptionIds));
+  if (uniqueOptionIds.length === 0) {
+    throw new InvalidAnswerOptionError("At least one answer option must be selected");
+  }
+
+  const question = await prisma.sessionQuestion.findUnique({
+    where: { id: session.openQuestionId },
   });
-  if (!option || option.sessionQuestionId !== session.openQuestionId) {
+  if (question?.type === "SINGLE_SELECT" && uniqueOptionIds.length > 1) {
+    throw new InvalidAnswerOptionError("This Question only accepts a single selected option");
+  }
+
+  const options = await prisma.sessionAnswerOption.findMany({
+    where: { id: { in: uniqueOptionIds } },
+  });
+  const validOptions = options.filter((option) => option.sessionQuestionId === session.openQuestionId);
+  if (validOptions.length !== uniqueOptionIds.length) {
     throw new InvalidAnswerOptionError("That answer option does not belong to the open Question");
   }
 
@@ -66,8 +82,11 @@ export async function submitAnswer(
       data: {
         sessionQuestionId: session.openQuestionId,
         studentId,
-        answerOptionId: option.id,
+        selections: {
+          create: uniqueOptionIds.map((answerOptionId) => ({ answerOptionId })),
+        },
       },
+      include: { selections: true },
     });
     return toAnswerView(answer);
   } catch (error) {
@@ -91,6 +110,7 @@ export async function getAnswerForStudent(
 ): Promise<AnswerView | null> {
   const answer = await prisma.answer.findUnique({
     where: { sessionQuestionId_studentId: { sessionQuestionId, studentId } },
+    include: { selections: true },
   });
   return answer ? toAnswerView(answer) : null;
 }
@@ -103,6 +123,7 @@ export type AnalysisOptionView = { id: string; text: string; count: number; isCo
 export type QuestionAnalysisView = {
   id: string;
   prompt: string;
+  type: QuestionType;
   options: AnalysisOptionView[];
   totalAnswered: number;
 };
@@ -112,17 +133,28 @@ export type QuestionAnalysisView = {
 // shape (as returned by session-service's closeQuestion) rather than
 // re-fetching it, since counting Answers is this module's own concern.
 // A Student who submitted no Answer is naturally excluded — they have no
-// Answer row to count (see CONTEXT.md's Answer definition).
+// Answer row to count (see CONTEXT.md's Answer definition). A Student who
+// selected multiple options on a multi-select Question counts toward each
+// of their selected options' bars, but only once toward totalAnswered.
 export async function getQuestionAnalysis(question: {
   id: string;
   prompt: string;
+  type: QuestionType;
   options: { id: string; text: string; isCorrect: boolean }[];
 }): Promise<QuestionAnalysisView> {
-  const answers = await prisma.answer.findMany({ where: { sessionQuestionId: question.id } });
+  const answers = await prisma.answer.findMany({
+    where: { sessionQuestionId: question.id },
+    include: { selections: true },
+  });
 
   const countByOption = new Map<string, number>();
   for (const answer of answers) {
-    countByOption.set(answer.answerOptionId, (countByOption.get(answer.answerOptionId) ?? 0) + 1);
+    for (const selection of answer.selections) {
+      countByOption.set(
+        selection.answerOptionId,
+        (countByOption.get(selection.answerOptionId) ?? 0) + 1
+      );
+    }
   }
 
   const options = question.options.map((option) => ({
@@ -132,5 +164,11 @@ export async function getQuestionAnalysis(question: {
     count: countByOption.get(option.id) ?? 0,
   }));
 
-  return { id: question.id, prompt: question.prompt, options, totalAnswered: answers.length };
+  return {
+    id: question.id,
+    prompt: question.prompt,
+    type: question.type,
+    options,
+    totalAnswered: answers.length,
+  };
 }

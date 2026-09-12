@@ -25,7 +25,7 @@ A reusable, lecturer-authored template of quiz-style questions, each with exactl
 _Avoid_: Survey, survey set
 
 **Question**:
-A single prompt with a set of possible answers, belonging to exactly one Set. For the MVP, always single-select multiple choice.
+A single prompt with a set of possible answers, belonging to exactly one Set. Authored as either single-select or multi-select; a Question Set Question marks one (single-select) or one-or-more (multi-select) options as correct, while a Survey Set Question never marks any as correct regardless of selection type.
 _Avoid_: Item, prompt
 
 ### Live runs
@@ -41,7 +41,7 @@ One live run of a Question Set in front of a class. Students join with a nicknam
 _Avoid_: Survey session, quiz, session
 
 **Answer**:
-A Student's one-time, locked submission to an open Question. Cannot be changed once submitted. A Student who submits nothing before the Question closes scores 0 (Quiz Session) and is excluded from that Question's Analysis (both Session types), but remains in the Session for subsequent Questions.
+A Student's one-time, locked submission to an open Question — one selected option for a single-select Question, one or more for a multi-select Question. Cannot be changed once submitted. A Student who submits nothing before the Question closes scores 0 (Quiz Session) and is excluded from that Question's Analysis (both Session types), but remains in the Session for subsequent Questions. Quiz Session scoring is per-option: one point per correctly selected option minus one point per incorrectly selected option, floored at zero for that Question (see [ADR 0002](docs/adr/0002-multi-select-scoring.md)) — which reduces to the original all-or-nothing 1-or-0 for a single-select Question.
 _Avoid_: Response, submission
 
 A Session's Questions, Answers, Analyses, and (for a Quiz Session) Leaderboard are persisted after it ends, so the lecturer can review them later from their account.

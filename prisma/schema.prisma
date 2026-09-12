@@ -26,6 +26,11 @@ enum DisplayMode {
   COMBINED
 }
 
+enum QuestionType {
+  SINGLE_SELECT
+  MULTI_SELECT
+}
+
 model Set {
   id         String     @id @default(cuid())
   lecturerId String
@@ -45,6 +50,7 @@ model Question {
   setId     String
   set       Set            @relation(fields: [setId], references: [id], onDelete: Cascade)
   prompt    String
+  type      QuestionType   @default(SINGLE_SELECT)
   order     Int
   createdAt DateTime       @default(now())
   options   AnswerOption[]
@@ -129,6 +135,7 @@ model SessionQuestion {
   sessionId String
   session   Session               @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   prompt    String
+  type      QuestionType
   order     Int
   options   SessionAnswerOption[]
   answers   Answer[]
@@ -137,13 +144,13 @@ model SessionQuestion {
 }
 
 model SessionAnswerOption {
-  id                String          @id @default(cuid())
+  id                String              @id @default(cuid())
   sessionQuestionId String
-  sessionQuestion   SessionQuestion @relation(fields: [sessionQuestionId], references: [id], onDelete: Cascade)
+  sessionQuestion   SessionQuestion     @relation(fields: [sessionQuestionId], references: [id], onDelete: Cascade)
   text              String
   isCorrect         Boolean
   order             Int
-  answers           Answer[]
+  selections        AnswerSelection[]
 
   @@index([sessionQuestionId])
 }
@@ -152,17 +159,32 @@ model SessionAnswerOption {
 // CONTEXT.md's Answer definition). The compound unique constraint enforces
 // "at most one Answer per Student per Question" at the database level; there
 // is no update path by design — an Answer is created once and never edited.
+// The Answer itself no longer points directly at a single option: it
+// references a set of options via AnswerSelection below, since a
+// multi-select Question's Answer can name more than one (see ticket #10).
 model Answer {
-  id                String              @id @default(cuid())
+  id                String            @id @default(cuid())
   sessionQuestionId String
-  sessionQuestion   SessionQuestion     @relation(fields: [sessionQuestionId], references: [id], onDelete: Cascade)
+  sessionQuestion   SessionQuestion   @relation(fields: [sessionQuestionId], references: [id], onDelete: Cascade)
   studentId         String
-  student           Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  answerOptionId    String
-  answerOption      SessionAnswerOption @relation(fields: [answerOptionId], references: [id], onDelete: Cascade)
-  createdAt         DateTime            @default(now())
+  student           Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt         DateTime          @default(now())
+  selections        AnswerSelection[]
 
   @@unique([sessionQuestionId, studentId])
   @@index([studentId])
+}
+
+// One selected option within an Answer. A single-select Answer has exactly
+// one row here; a multi-select Answer has one row per option the Student
+// chose.
+model AnswerSelection {
+  id             String              @id @default(cuid())
+  answerId       String
+  answer         Answer              @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  answerOptionId String
+  answerOption   SessionAnswerOption @relation(fields: [answerOptionId], references: [id], onDelete: Cascade)
+
+  @@unique([answerId, answerOptionId])
   @@index([answerOptionId])
 }

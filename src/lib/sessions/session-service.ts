@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { prisma } from "@/lib/db/client";
-import { Prisma, type DisplayMode, type SetType } from "@prisma/client";
+import { Prisma, type DisplayMode, type QuestionType, type SetType } from "@prisma/client";
 import { NotFoundError, SessionEndedError } from "@/lib/errors";
 import { getSet } from "@/lib/sets/set-service";
 
@@ -12,10 +12,15 @@ export class QuestionNotOpenError extends Error {}
 export class QuestionNotClosedError extends Error {}
 export class NoNextQuestionError extends Error {}
 
-export type { DisplayMode, SetType };
+export type { DisplayMode, QuestionType, SetType };
 
 export type SessionOptionView = { id: string; text: string; isCorrect: boolean };
-export type SessionQuestionView = { id: string; prompt: string; options: SessionOptionView[] };
+export type SessionQuestionView = {
+  id: string;
+  prompt: string;
+  type: QuestionType;
+  options: SessionOptionView[];
+};
 export function sessionTypeLabel(type: SetType): string {
   return type === "SURVEY" ? "Survey Session" : "Quiz Session";
 }
@@ -38,7 +43,12 @@ export type SessionView = {
 // must not leak the correct answer before the Question closes — at which
 // point closedQuestion (below) reveals it as part of the Analysis.
 export type PublicOptionView = { id: string; text: string };
-export type PublicQuestionView = { id: string; prompt: string; options: PublicOptionView[] };
+export type PublicQuestionView = {
+  id: string;
+  prompt: string;
+  type: QuestionType;
+  options: PublicOptionView[];
+};
 export type PublicSessionView = {
   id: string;
   type: SetType;
@@ -108,6 +118,7 @@ type SessionRecord = {
   questions: {
     id: string;
     prompt: string;
+    type: QuestionType;
     options: { id: string; text: string; isCorrect: boolean }[];
   }[];
 };
@@ -115,11 +126,13 @@ type SessionRecord = {
 function toSessionQuestionView(question: {
   id: string;
   prompt: string;
+  type: QuestionType;
   options: { id: string; text: string; isCorrect: boolean }[];
 }): SessionQuestionView {
   return {
     id: question.id,
     prompt: question.prompt,
+    type: question.type,
     options: question.options.map((option) => ({
       id: option.id,
       text: option.text,
@@ -161,6 +174,7 @@ function toPublicSessionView(
       ? {
           id: openQuestion.id,
           prompt: openQuestion.prompt,
+          type: openQuestion.type,
           options: openQuestion.options.map((option) => ({ id: option.id, text: option.text })),
         }
       : null,
@@ -194,6 +208,7 @@ export async function startSession(
         questions: {
           create: set.questions.map((question, questionIndex) => ({
             prompt: question.prompt,
+            type: question.type,
             order: questionIndex,
             options: {
               create: question.options.map((option, optionIndex) => ({
